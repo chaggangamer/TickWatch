@@ -4,11 +4,11 @@ services:
     image: tickwatch:local
     ports:
       - "8080:8080"
-    volumes:
-      - ./data:/data
     environment:
       TICKWATCH_DB_PATH: /data/tickwatch.db
       TICKWATCH_LISTEN: ":8080"
+    volumes:
+      - tickwatch-data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "/tickwatch", "healthcheck", "http://localhost:8080/healthz"]
@@ -16,3 +16,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  tickwatch-data:

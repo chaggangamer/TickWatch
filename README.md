@@ -71,6 +71,9 @@ Or with docker compose:
 docker compose up -d
 ```
 
+Compose stores data in the named volume `tickwatch-data` (mounted at `/data` in the
+container). Inspect it with `docker volume inspect tickwatch-data`.
+
 Open http://localhost:8080. On first start Tickwatch creates an admin user and, if
 TICKWATCH_ADMIN_PASSWORD is not set, logs the generated password once at startup.
 Change it after logging in.
@@ -196,6 +199,15 @@ falls back to TCP checks on ports 80 and 443 and says so in the error message.
 **How do I back up?**
 Copy the SQLite file (or use `sqlite3 tickwatch.db ".backup backup.db"`). Everything
 lives in that one file.
+
+**The container logs "unable to open database file". What is wrong?**
+The container runs as a non-root user (uid 65532) and cannot write where the database
+file points. With docker compose this should not happen: the named volume is
+initialized with the correct ownership from the image. If you replace the volume with
+a bind mount (`./data:/data`), the host directory must be writable by uid 65532 — run
+`chown 65532:65532 ./data` on the host, or use `docker compose down` and switch back
+to the named volume. The same applies when pointing `database.path` at any other
+directory: it must exist and be writable by uid 65532.
 
 **Can I monitor internal services?**
 Yes. Self-hosted installs allow private addresses by default; set
