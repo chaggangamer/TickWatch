@@ -31,22 +31,29 @@
     <input id="f-timeout" name="timeout" type="number" min="1" max="120" value="{{.Monitor.Timeout}}" required>
     {{with index .FieldErrors "timeout"}}<div class="field-error">{{.}}</div>{{end}}
   </div>
-  <div class="field-group">
-    <label for="f-retries">Retries</label>
-    <input id="f-retries" name="retries" type="number" min="0" max="5" value="{{.Monitor.Retries}}">
-    {{with index .FieldErrors "retries"}}<div class="field-error">{{.}}</div>{{end}}
-  </div>
-  <div class="field-group">
-    <label for="f-threshold">Failures before down</label>
-    <input id="f-threshold" name="failure_threshold" type="number" min="1" max="10" value="{{.Monitor.FailureThreshold}}">
-    {{with index .FieldErrors "failure_threshold"}}<div class="field-error">{{.}}</div>{{end}}
-  </div>
-  <div class="field-group">
-    <label for="f-cooldown">Alert cooldown (seconds)</label>
-    <input id="f-cooldown" name="cooldown" type="number" min="0" max="86400" value="{{.Monitor.Cooldown}}">
-    {{with index .FieldErrors "cooldown"}}<div class="field-error">{{.}}</div>{{end}}
-  </div>
 </div>
+<details class="advanced" {{if or (index .FieldErrors "retries") (index .FieldErrors "failure_threshold") (index .FieldErrors "cooldown")}}open{{end}}>
+  <summary>Advanced</summary>
+  <div class="grid">
+    <div class="field-group">
+      <label for="f-retries">Retries</label>
+      <input id="f-retries" name="retries" type="number" min="0" max="5" value="{{.Monitor.Retries}}">
+      {{with index .FieldErrors "retries"}}<div class="field-error">{{.}}</div>{{end}}
+      <div class="field-hint">extra attempts before a check fails</div>
+    </div>
+    <div class="field-group">
+      <label for="f-threshold">Failures before down</label>
+      <input id="f-threshold" name="failure_threshold" type="number" min="1" max="10" value="{{.Monitor.FailureThreshold}}">
+      {{with index .FieldErrors "failure_threshold"}}<div class="field-error">{{.}}</div>{{end}}
+    </div>
+    <div class="field-group">
+      <label for="f-cooldown">Alert cooldown (seconds)</label>
+      <input id="f-cooldown" name="cooldown" type="number" min="0" max="86400" value="{{.Monitor.Cooldown}}">
+      {{with index .FieldErrors "cooldown"}}<div class="field-error">{{.}}</div>{{end}}
+      <div class="field-hint">repeat DOWN alerts at most once per cooldown</div>
+    </div>
+  </div>
+</details>
 <fieldset class="type-fieldset" data-type="http">
   <legend>HTTP</legend>
   <div class="field-group">
@@ -145,16 +152,16 @@
 </fieldset>
 <fieldset>
   <legend>Alerting and visibility</legend>
-  <div class="grid">
-    <div class="field-group">
-      <label for="f-channels">Alert channels</label>
-      <select id="f-channels" name="channels" multiple size="5">
-        {{$sel := .Selected}}
-        {{range .Channels}}<option value="{{.ID}}" {{if index $sel .ID}}selected{{end}}>{{.Name}} ({{.Type}})</option>{{end}}
-      </select>
-      <input type="hidden" name="channels_sent" value="1">
-      <div class="field-hint">hold ctrl or cmd to select several</div>
+  <div class="field-group">
+    <label>Alert channels</label>
+    <div class="check-list" id="f-channels">
+      {{$sel := .Selected}}
+      {{range .Channels}}<label class="check-row"><input type="checkbox" name="channels" value="{{.ID}}" {{if index $sel .ID}}checked{{end}}> {{.Name}} <span class="cell-sub">({{.Type}})</span></label>{{end}}
+      {{if not .Channels}}<span class="muted">No channels yet. <a href="/channels">Create one</a> to get alerts.</span>{{end}}
     </div>
+    <input type="hidden" name="channels_sent" value="1">
+  </div>
+  <div class="grid">
     <div class="field-group">
       <label for="f-public">Show on public status page</label>
       <input id="f-public" type="checkbox" name="is_public" {{if .Monitor.IsPublic}}checked{{end}}>
