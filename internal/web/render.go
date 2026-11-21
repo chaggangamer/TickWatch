@@ -24,6 +24,14 @@ func sessionFrom(ctx context.Context) *sessionCtx {
 	return &s
 }
 
+type pageMeta struct {
+	CSRF    string
+	Path    string
+	Version string
+	Title   string
+	IsEdit  bool
+}
+
 func (s *server) parseTemplates() error {
 	funcs := template.FuncMap{
 		"fmtTime": func(unix int64) string {
@@ -85,11 +93,16 @@ func (s *server) parseTemplates() error {
 	return nil
 }
 
-func (s *server) render(w http.ResponseWriter, status int, name string, data any) {
+func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name string, data any) {
 	t, ok := s.tpl[name]
 	if !ok {
-		http.Error(w, "template not found", 500)
+		http.Error(w, "template not found", http.StatusInternalServerError)
 		return
+	}
+	if m, ok := data["Meta"].(pageMeta); ok {
+		m.Path = r.URL.Path
+		m.Version = s.version
+		data["Meta"] = m
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)

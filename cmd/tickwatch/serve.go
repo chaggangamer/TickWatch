@@ -115,6 +115,7 @@ func runServe(args []string) error {
 		Alerts:  alerts,
 		Tracker: tracker,
 		Log:     log,
+		Version: version,
 		Secure:  strings.HasPrefix(cfg.Server.BaseURL, "https://"),
 	})
 	if err != nil {

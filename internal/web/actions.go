@@ -286,7 +286,7 @@ func (s *server) formError(w http.ResponseWriter, r *http.Request, m *store.Moni
 	if m != nil {
 		data["Monitor"] = m
 	}
-	s.render(w, 400, "monitor_form", data)
+	s.render(w, r, 400, "monitor_form", data)
 }
 
 func splitTo(v string) []string {

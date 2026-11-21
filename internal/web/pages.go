@@ -13,12 +13,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type pageMeta struct {
-	CSRF   string
-	IsEdit bool
-	Title  string
-}
-
 func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
 		if sess, err := s.store.Session(store.HashToken(c.Value)); err == nil && sess.ExpiresAt > time.Now().Unix() {
@@ -26,12 +20,12 @@ func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.render(w, 200, "login", map[string]any{"Error": ""})
+	s.render(w, r, 200, "login", map[string]any{"Error": ""})
 }
 
 func (s *server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	if s.limiter.blocked(clientIP(r)) {
-		s.render(w, 429, "login", map[string]any{"Error": "Too many attempts. Try again in a minute."})
+		s.render(w, r, 429, "login", map[string]any{"Error": "Too many attempts. Try again in a minute."})
 		return
 	}
 	username := r.FormValue("username")
@@ -39,16 +33,16 @@ func (s *server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	user, err := s.store.UserByName(username)
 	if err != nil {
 		s.limiter.record(clientIP(r))
-		s.render(w, 200, "login", map[string]any{"Error": "Invalid username or password."})
+		s.render(w, r, 200, "login", map[string]any{"Error": "Invalid username or password."})
 		return
 	}
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
 		s.limiter.record(clientIP(r))
-		s.render(w, 200, "login", map[string]any{"Error": "Invalid username or password."})
+		s.render(w, r, 200, "login", map[string]any{"Error": "Invalid username or password."})
 		return
 	}
 	if err := s.createSession(w, user.ID); err != nil {
-		s.render(w, 500, "login", map[string]any{"Error": "Could not create session."})
+		s.render(w, r, 500, "login", map[string]any{"Error": "Could not create session."})
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -90,7 +84,7 @@ func (s *server) dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, row)
 	}
-	s.render(w, 200, "monitors", map[string]any{
+	s.render(w, r, 200, "monitors", map[string]any{
 		"Meta":     pageMeta{CSRF: sess.csrf, Title: "Monitors"},
 		"Monitors": rows,
 	})
@@ -125,7 +119,7 @@ func (s *server) monitorDetail(w http.ResponseWriter, r *http.Request) {
 	if m.SSLExpiresAt > 0 {
 		sslDays = (m.SSLExpiresAt - time.Now().Unix()) / 86400
 	}
-	s.render(w, 200, "monitor_detail", map[string]any{
+	s.render(w, r, 200, "monitor_detail", map[string]any{
 		"Meta":      pageMeta{CSRF: sess.csrf, Title: m.Name},
 		"Monitor":   m,
 		"Target":    m.Target(),
@@ -196,7 +190,7 @@ func (s *server) monitorForm(w http.ResponseWriter, r *http.Request) {
 		meta.Title = "Edit " + m.Name
 		data["Meta"] = meta
 	}
-	s.render(w, 200, "monitor_form", data)
+	s.render(w, r, 200, "monitor_form", data)
 }
 
 func headerLines(headers map[string]string) string {
@@ -229,7 +223,7 @@ func (s *server) channelsPage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.render(w, 200, "channels", data)
+	s.render(w, r, 200, "channels", data)
 }
 
 func cfgForForm(c *store.Channel) map[string]any {
@@ -288,7 +282,7 @@ func (s *server) statusPage(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, row)
 	}
-	s.render(w, 200, "status", map[string]any{
+	s.render(w, r, 200, "status", map[string]any{
 		"Meta":     pageMeta{Title: "Status"},
 		"Monitors": rows,
 	})

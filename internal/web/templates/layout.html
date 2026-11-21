@@ -12,14 +12,14 @@
     <a class="brand" href="/">tickwatch</a>
     <div class="nav-links">
       {{if .Meta.CSRF}}
-      <a href="/">Monitors</a>
-      <a href="/channels">Channels</a>
+      <a href="/" {{if eq .Meta.Path "/"}}class="active"{{end}}>Monitors</a>
+      <a href="/channels" {{if eq .Meta.Path "/channels"}}class="active"{{end}}>Channels</a>
       <form method="post" action="/logout" class="inline-form">
         <input type="hidden" name="_csrf" value="{{.Meta.CSRF}}">
         <button type="submit" class="linklike">Logout</button>
       </form>
       {{else}}
-      <a href="/status">Status page</a>
+      <a href="/status" {{if eq .Meta.Path "/status"}}class="active"{{end}}>Status page</a>
       {{end}}
     </div>
   </div>
@@ -28,7 +28,7 @@
 {{template "content" .}}
 </main>
 <footer class="footer">
-  <div class="container">Tickwatch - uptime and cron monitoring</div>
+  <div class="container">Tickwatch{{if .Meta.Version}} {{.Meta.Version}}{{end}} - uptime and cron monitoring</div>
 </footer>
 <script src="/static/app.js"></script>
 </body>

@@ -34,6 +34,7 @@ type Deps struct {
 	Alerts  *alert.Dispatcher
 	Tracker *incident.Tracker
 	Log     *slog.Logger
+	Version string
 	Secure  bool
 }
 
@@ -43,6 +44,7 @@ type server struct {
 	alerts  *alert.Dispatcher
 	tracker *incident.Tracker
 	log     *slog.Logger
+	version string
 	secure  bool
 	tpl     map[string]*template.Template
 	limiter *loginLimiter
@@ -58,6 +60,7 @@ func New(d Deps) (http.Handler, error) {
 		alerts:  d.Alerts,
 		tracker: d.Tracker,
 		log:     d.Log,
+		version: d.Version,
 		secure:  d.Secure,
 		limiter: newLoginLimiter(),
 	}
