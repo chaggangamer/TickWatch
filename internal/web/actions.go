@@ -148,7 +148,7 @@ func (s *server) monitorCreate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) monitorUpdate(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", http.StatusForbidden)
+		s.errorPage(w, r, http.StatusForbidden, "Forbidden", "Your session expired or the form token was missing. Go back and try again.")
 		return
 	}
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -162,7 +162,7 @@ func (s *server) monitorUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "load monitor failed", 500)
+		s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not load the monitor. Check the server logs.")
 		return
 	}
 	m, err := s.buildMonitorFromForm(r, existing)
@@ -182,7 +182,7 @@ func (s *server) monitorUpdate(w http.ResponseWriter, r *http.Request) {
 		s.tracker.Reset(m.ID)
 	}
 	if err := s.store.UpdateMonitor(m); err != nil {
-		http.Error(w, "update failed", 500)
+		s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not save the monitor.")
 		return
 	}
 	s.linkChannels(r, m.ID)
@@ -191,7 +191,7 @@ func (s *server) monitorUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) monitorDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", http.StatusForbidden)
+		s.errorPage(w, r, http.StatusForbidden, "Forbidden", "Your session expired or the form token was missing. Go back and try again.")
 		return
 	}
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -200,7 +200,7 @@ func (s *server) monitorDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.DeleteMonitor(id); err != nil && !errors.Is(err, store.ErrNotFound) {
-		http.Error(w, "delete failed", 500)
+		s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not complete the delete.")
 		return
 	}
 	s.tracker.Reset(id)
@@ -209,7 +209,7 @@ func (s *server) monitorDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) monitorPause(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", http.StatusForbidden)
+		s.errorPage(w, r, http.StatusForbidden, "Forbidden", "Your session expired or the form token was missing. Go back and try again.")
 		return
 	}
 	s.setPaused(w, r, false)
@@ -217,7 +217,7 @@ func (s *server) monitorPause(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) monitorResume(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", http.StatusForbidden)
+		s.errorPage(w, r, http.StatusForbidden, "Forbidden", "Your session expired or the form token was missing. Go back and try again.")
 		return
 	}
 	s.setPaused(w, r, true)
@@ -235,7 +235,7 @@ func (s *server) setPaused(w http.ResponseWriter, r *http.Request, resume bool) 
 		return
 	}
 	if err != nil {
-		http.Error(w, "load monitor failed", 500)
+		s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not load the monitor. Check the server logs.")
 		return
 	}
 	m.Enabled = resume
@@ -244,7 +244,7 @@ func (s *server) setPaused(w http.ResponseWriter, r *http.Request, resume bool) 
 		s.tracker.Reset(m.ID)
 	}
 	if err := s.store.UpdateMonitor(m); err != nil {
-		http.Error(w, "update failed", 500)
+		s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not save the monitor.")
 		return
 	}
 	back := "/"
@@ -434,7 +434,7 @@ func channelSecretKeys(chType string) []string {
 
 func (s *server) channelSave(w http.ResponseWriter, r *http.Request, id int64) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", http.StatusForbidden)
+		s.errorPage(w, r, http.StatusForbidden, "Forbidden", "Your session expired or the form token was missing. Go back and try again.")
 		return
 	}
 	chType := r.FormValue("type")
@@ -451,7 +451,7 @@ func (s *server) channelSave(w http.ResponseWriter, r *http.Request, id int64) {
 			return
 		}
 		if err != nil {
-			http.Error(w, "load channel failed", 500)
+			s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not load the channel.")
 			return
 		}
 		existing = c
@@ -469,7 +469,7 @@ func (s *server) channelSave(w http.ResponseWriter, r *http.Request, id int64) {
 	if existing == nil {
 		c := &store.Channel{Type: chType, Name: name, Config: raw, CreatedAt: time.Now().Unix()}
 		if err := s.store.CreateChannel(c); err != nil {
-			http.Error(w, "save failed", 500)
+			s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not save the channel.")
 			return
 		}
 	} else {
@@ -477,7 +477,7 @@ func (s *server) channelSave(w http.ResponseWriter, r *http.Request, id int64) {
 		existing.Name = name
 		existing.Config = raw
 		if err := s.store.UpdateChannel(existing); err != nil {
-			http.Error(w, "save failed", 500)
+			s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not save the channel.")
 			return
 		}
 	}
@@ -506,7 +506,7 @@ func (s *server) channelUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) channelDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", http.StatusForbidden)
+		s.errorPage(w, r, http.StatusForbidden, "Forbidden", "Your session expired or the form token was missing. Go back and try again.")
 		return
 	}
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -515,7 +515,7 @@ func (s *server) channelDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.DeleteChannel(id); err != nil && !errors.Is(err, store.ErrNotFound) {
-		http.Error(w, "delete failed", 500)
+		s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not complete the delete.")
 		return
 	}
 	http.Redirect(w, r, "/channels", http.StatusSeeOther)

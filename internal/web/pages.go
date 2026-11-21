@@ -60,7 +60,7 @@ type monitorRow struct {
 func (s *server) dashboard(w http.ResponseWriter, r *http.Request) {
 	monitors, err := s.store.Monitors()
 	if err != nil {
-		http.Error(w, "load monitors failed", 500)
+		s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not load monitors. Check the server logs.")
 		return
 	}
 	sess := sessionFrom(r.Context())
@@ -107,7 +107,7 @@ func (s *server) monitorDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "load monitor failed", 500)
+		s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not load the monitor. Check the server logs.")
 		return
 	}
 	results, _, _ := s.store.Results(m.ID, 1, 50)
@@ -187,7 +187,7 @@ func (s *server) monitorForm(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err != nil {
-			http.Error(w, "load monitor failed", 500)
+			s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not load the monitor. Check the server logs.")
 			return
 		}
 		data["IsEdit"] = true
@@ -287,7 +287,7 @@ func cfgForForm(c *store.Channel) map[string]any {
 func (s *server) statusPage(w http.ResponseWriter, r *http.Request) {
 	monitors, err := s.store.PublicMonitors()
 	if err != nil {
-		http.Error(w, "load monitors failed", 500)
+		s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong", "Could not load monitors. Check the server logs.")
 		return
 	}
 	now := time.Now().Unix()
@@ -409,6 +409,20 @@ func (s *server) dashSeries(w http.ResponseWriter, r *http.Request) {
 func writeJSONOK(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (s *server) errorPage(w http.ResponseWriter, r *http.Request, status int, title, msg string) {
+	sess := sessionFrom(r.Context())
+	var csrf string
+	if sess != nil {
+		csrf = sess.csrf
+	}
+	s.render(w, r, status, "error", map[string]any{
+		"Meta":    pageMeta{CSRF: csrf, Title: title},
+		"Code":    status,
+		"Title":   title,
+		"Message": msg,
+	})
 }
 
 func (s *server) passwordPage(w http.ResponseWriter, r *http.Request) {

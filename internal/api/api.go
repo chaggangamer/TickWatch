@@ -28,6 +28,12 @@ func New(d Deps) http.Handler {
 		d.Log = slog.Default()
 	}
 	r := chi.NewRouter()
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		writeErr(w, http.StatusNotFound, "not_found", "the requested resource does not exist")
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "this method is not supported on the route")
+	})
 
 	r.Get("/healthz", healthz(d))
 	r.Get("/ping/{token}", ping(d))

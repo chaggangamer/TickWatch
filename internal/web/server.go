@@ -69,6 +69,8 @@ func New(d Deps) (http.Handler, error) {
 	}
 
 	mux := chi.NewRouter()
+	mux.Use(s.recoverer)
+	mux.NotFound(s.notFound)
 	mux.Handle("/static/*", staticHandler())
 	mux.Get("/login", s.loginPage)
 	mux.Post("/login", s.loginSubmit)
@@ -97,6 +99,24 @@ func New(d Deps) (http.Handler, error) {
 		priv.Get("/dash/monitors/{id}/series", s.dashSeries)
 	})
 	return mux, nil
+}
+
+func (s *server) recoverer(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				s.log.Error("panic recovered", "path", r.URL.Path, "panic", rec)
+				s.errorPage(w, r, http.StatusInternalServerError, "Something went wrong",
+					"An unexpected error occurred. Try again, and check the server logs if it keeps happening.")
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *server) notFound(w http.ResponseWriter, r *http.Request) {
+	s.errorPage(w, r, http.StatusNotFound, "Page not found",
+		"The page you are looking for does not exist or has moved.")
 }
 
 func staticHandler() http.HandlerFunc {
