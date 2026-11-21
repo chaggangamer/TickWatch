@@ -1,0 +1,22 @@
+{{define "content"}}
+<h1>Status</h1>
+<p class="muted">Live status of monitored services. This page refreshes every 60 seconds.</p>
+<div class="status-list">
+{{range .Monitors}}
+<div class="card status-row">
+  <span class="dot dot-{{.Monitor.Status}}"></span>
+  <div class="status-main">
+    <strong>{{.Monitor.Name}}</strong>
+    <span class="muted">{{if .Target}}{{.Target}}{{else}}heartbeat{{end}}</span>
+  </div>
+  <div class="status-stats">
+    <span>24h {{if .u24}}{{printf "%.2f" .u24}}%{{else}}-{{end}}</span>
+    <span>7d {{if .u7}}{{printf "%.2f" .u7}}%{{else}}-{{end}}</span>
+    <span>30d {{if .u30}}{{printf "%.2f" .u30}}%{{else}}-{{end}}</span>
+    {{if .LatencyMS}}<span class="latency">{{.LatencyMS}} ms</span>{{end}}
+  </div>
+</div>
+{{end}}
+{{if not .Monitors}}<p class="muted">No public monitors configured.</p>{{end}}
+</div>
+{{end}}

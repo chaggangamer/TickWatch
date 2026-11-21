@@ -1,0 +1,42 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>Monitors</h1>
+  <a class="btn btn-primary" href="/monitors/new">Add monitor</a>
+</div>
+<div class="table-wrap">
+<table class="table" id="monitor-table">
+  <thead>
+    <tr><th>Status</th><th>Name</th><th>Type</th><th>Target</th><th>Response</th><th>Uptime 24h</th><th>Last check</th><th></th></tr>
+  </thead>
+  <tbody>
+  {{$csrf := .Meta.CSRF}}
+  {{range .Monitors}}
+  <tr data-monitor-id="{{.ID}}">
+    <td><span class="dot dot-{{if not .Enabled}}paused{{else}}{{.Status}}{{end}}" title="{{if not .Enabled}}paused{{else}}{{.Status}}{{end}}"></span></td>
+    <td><a href="/monitors/{{.ID}}">{{.Name}}</a></td>
+    <td>{{.Type}}</td>
+    <td class="mono target">{{if .Target}}{{.Target}}{{else if eq .Type "heartbeat"}}heartbeat{{end}}</td>
+    <td><span class="latency">{{if .LatencyMS}}{{.LatencyMS}} ms{{else}}-{{end}}</span></td>
+    <td class="uptime">{{if .HasUptime}}{{printf "%.2f" .Uptime24}}%{{else}}-{{end}}</td>
+    <td class="last-check">{{ago .LastCheckAt}}</td>
+    <td class="actions">
+      {{spark .Spark}}
+      <form method="post" action="/monitors/{{.ID}}/{{if .Enabled}}pause{{else}}resume{{end}}" class="inline-form">
+        <div>
+        <input type="hidden" name="_csrf" value="{{$csrf}}">
+        <button class="btn btn-sm">{{if .Enabled}}Pause{{else}}Resume{{end}}</button>
+        </div>
+      </form>
+      <a class="btn btn-sm" href="/monitors/{{.ID}}/edit">Edit</a>
+      <form method="post" action="/monitors/{{.ID}}/delete" class="inline-form confirm-delete">
+        <input type="hidden" name="_csrf" value="{{$csrf}}">
+        <button class="btn btn-sm btn-danger">Delete</button>
+      </form>
+    </td>
+  </tr>
+  {{end}}
+  {{if not .Monitors}}<tr><td colspan="8" class="muted">No monitors yet. Add one to start checking.</td></tr>{{end}}
+  </tbody>
+</table>
+</div>
+{{end}}

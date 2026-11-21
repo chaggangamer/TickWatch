@@ -1,0 +1,75 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>{{.Monitor.Name}} <span class="dot dot-{{if not .Monitor.Enabled}}paused{{else}}{{.Monitor.Status}}{{end}}"></span></h1>
+  <div class="actions">
+    {{$csrf := .Meta.CSRF}}
+    <form method="post" action="/monitors/{{.Monitor.ID}}/{{if .Monitor.Enabled}}pause{{else}}resume{{end}}" class="inline-form">
+      <input type="hidden" name="_csrf" value="{{$csrf}}">
+      <button class="btn btn-sm">{{if .Monitor.Enabled}}Pause{{else}}Resume{{end}}</button>
+    </form>
+    <a class="btn btn-sm" href="/monitors/{{.Monitor.ID}}/edit">Edit</a>
+    <form method="post" action="/monitors/{{.Monitor.ID}}/delete" class="inline-form confirm-delete">
+      <input type="hidden" name="_csrf" value="{{$csrf}}">
+      <button class="btn btn-sm btn-danger">Delete</button>
+    </form>
+  </div>
+</div>
+<p class="muted">
+  {{.Monitor.Type}}{{if .Target}} {{.Target}}{{end}} - interval {{.Monitor.Interval}}s -
+  {{if .Monitor.Enabled}}last check {{ago .Monitor.LastCheckAt}}{{else}}paused{{end}}
+</p>
+{{if eq .Monitor.Type "heartbeat"}}
+<div class="card">
+  <strong>Ping URL:</strong> <code>{{.PingURL}}</code>
+  <span class="muted">call this from your job on success; expected every {{.Monitor.HeartbeatPeriod}}s with {{.Monitor.HeartbeatGrace}}s grace</span>
+</div>
+{{end}}
+{{if gt .SSLDays 0}}
+<div class="card">SSL certificate expires in {{.SSLDays}} days ({{fmtTime .Monitor.SSLExpiresAt}})</div>
+{{end}}
+<div class="card">
+  <h2>Response time (24h)</h2>
+  <div id="chart" data-monitor="{{.Monitor.ID}}"></div>
+  <p class="muted chart-note" id="chart-note"></p>
+</div>
+<div class="card">
+  <h2>Recent checks</h2>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Time</th><th>Status</th><th>Code</th><th>Latency</th><th>Error</th></tr></thead>
+    <tbody>
+    {{range .Results}}
+    <tr>
+      <td>{{fmtTime .CreatedAt}}</td>
+      <td>{{if .OK}}<span class="ok">ok</span>{{else}}<span class="fail">fail</span>{{end}}</td>
+      <td>{{if .StatusCode}}{{.StatusCode}}{{else}}-{{end}}</td>
+      <td>{{if .LatencyMS}}{{.LatencyMS}} ms{{else}}-{{end}}</td>
+      <td class="muted err-cell">{{.Error}}</td>
+    </tr>
+    {{end}}
+    {{if not .Results}}<tr><td colspan="5" class="muted">No checks recorded yet.</td></tr>{{end}}
+    </tbody>
+  </table>
+  </div>
+</div>
+<div class="card">
+  <h2>Incidents</h2>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Started</th><th>Ended</th><th>Duration</th><th>Reason</th></tr></thead>
+    <tbody>
+    {{range .Incidents}}
+    <tr>
+      <td>{{fmtTime .StartedAt}}</td>
+      <td>{{if .Open}}<span class="fail">ongoing</span>{{else}}{{fmtTime .EndedAt}}{{end}}</td>
+      <td>{{dur .Duration}}</td>
+      <td class="muted err-cell">{{.Reason}}</td>
+    </tr>
+    {{end}}
+    {{if not .Incidents}}<tr><td colspan="4" class="muted">No incidents recorded.</td></tr>{{end}}
+    </tbody>
+  </table>
+  </div>
+</div>
+<script src="/static/chart.js"></script>
+{{end}}

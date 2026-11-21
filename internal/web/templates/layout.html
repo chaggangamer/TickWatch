@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{{if .Meta.Title}}<title>{{.Meta.Title}} - Tickwatch</title>{{else}}<title>Tickwatch</title>{{end}}
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="nav">
+  <div class="container nav-inner">
+    <a class="brand" href="/">tickwatch</a>
+    <div class="nav-links">
+      {{if .Meta.CSRF}}
+      <a href="/">Monitors</a>
+      <a href="/channels">Channels</a>
+      <form method="post" action="/logout" class="inline-form">
+        <input type="hidden" name="_csrf" value="{{.Meta.CSRF}}">
+        <button type="submit" class="linklike">Logout</button>
+      </form>
+      {{else}}
+      <a href="/status">Status page</a>
+      {{end}}
+    </div>
+  </div>
+</nav>
+<main class="container">
+{{template "content" .}}
+</main>
+<footer class="footer">
+  <div class="container">Tickwatch - uptime and cron monitoring</div>
+</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>

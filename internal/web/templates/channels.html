@@ -1,0 +1,85 @@
+{{define "content"}}
+<h1>Alert channels</h1>
+<div class="card">
+  <h2>Existing channels</h2>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Name</th><th>Type</th><th>Actions</th></tr></thead>
+    <tbody>
+    {{$csrf := .Meta.CSRF}}
+    {{range .Channels}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td>{{.Type}}</td>
+      <td class="actions">
+        <button class="btn btn-sm test-channel" data-id="{{.ID}}" data-csrf="{{$csrf}}">Send test</button>
+        <a class="btn btn-sm" href="/channels?edit={{.ID}}">Edit</a>
+        <form method="post" action="/channels/{{.ID}}/delete" class="inline-form confirm-delete">
+          <input type="hidden" name="_csrf" value="{{$csrf}}">
+          <button class="btn btn-sm btn-danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {{end}}
+    {{if not .Channels}}<tr><td colspan="3" class="muted">No channels configured. Add one to receive alerts.</td></tr>{{end}}
+    </tbody>
+  </table>
+  </div>
+  <p class="test-result" id="test-result"></p>
+</div>
+<div class="card">
+  <h2>{{if .EditChannel}}Edit channel{{else}}Add channel{{end}}</h2>
+  <form method="post" class="form" action="{{if .EditChannel}}/channels/{{.EditChannel.ID}}/update{{else}}/channels{{end}}">
+  <input type="hidden" name="_csrf" value="{{.Meta.CSRF}}">
+  <div class="grid">
+    <label>Name</label><input name="name" value="{{if .EditChannel}}{{.EditChannel.Name}}{{end}}" required maxlength="120">
+    <label>Type</label>
+    <select name="type" id="channel-type">
+      <option value="telegram" {{if and .EditChannel (eq .EditChannel.Type "telegram")}}selected{{end}}>Telegram</option>
+      <option value="slack" {{if and .EditChannel (eq .EditChannel.Type "slack")}}selected{{end}}>Slack</option>
+      <option value="discord" {{if and .EditChannel (eq .EditChannel.Type "discord")}}selected{{end}}>Discord</option>
+      <option value="smtp" {{if and .EditChannel (eq .EditChannel.Type "smtp")}}selected{{end}}>Email (SMTP)</option>
+      <option value="webhook" {{if and .EditChannel (eq .EditChannel.Type "webhook")}}selected{{end}}>Webhook</option>
+    </select>
+  </div>
+  <fieldset class="type-fieldset" data-type="telegram">
+    <legend>Telegram</legend>
+    <div class="grid">
+      <label>Bot token</label><input name="bot_token" type="password" placeholder="leave blank to keep current">
+      <label>Chat ID</label><input name="chat_id" value="{{with .Cfg}}{{.chat_id}}{{end}}">
+    </div>
+  </fieldset>
+  <fieldset class="type-fieldset" data-type="slack">
+    <legend>Slack</legend>
+    <div class="grid">
+      <label>Webhook URL</label><input name="slack_webhook_url" type="password" placeholder="leave blank to keep current">
+    </div>
+  </fieldset>
+  <fieldset class="type-fieldset" data-type="discord">
+    <legend>Discord</legend>
+    <div class="grid">
+      <label>Webhook URL</label><input name="discord_webhook_url" type="password" placeholder="leave blank to keep current">
+    </div>
+  </fieldset>
+  <fieldset class="type-fieldset" data-type="smtp">
+    <legend>Email</legend>
+    <div class="grid">
+      <label>Host</label><input name="host" value="{{with .Cfg}}{{.host}}{{end}}">
+      <label>Port</label><input name="port" type="number" value="{{with .Cfg}}{{.port}}{{else}}587{{end}}">
+      <label>Username</label><input name="username" value="{{with .Cfg}}{{.username}}{{end}}">
+      <label>Password</label><input name="password" type="password" placeholder="leave blank to keep current">
+      <label>From</label><input name="from" value="{{with .Cfg}}{{.from}}{{end}}" placeholder="tickwatch@example.com">
+      <label>To (comma separated)</label><input name="to" value="{{with .Cfg}}{{.to_join}}{{end}}">
+    </div>
+  </fieldset>
+  <fieldset class="type-fieldset" data-type="webhook">
+    <legend>Webhook</legend>
+    <div class="grid">
+      <label>URL</label><input name="url" value="{{with .Cfg}}{{.url}}{{end}}">
+      <label>Secret header</label><input name="secret" type="password" placeholder="leave blank to keep current">
+    </div>
+  </fieldset>
+  <button class="btn btn-primary" type="submit">Save channel</button>
+  </form>
+</div>
+{{end}}

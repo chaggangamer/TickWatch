@@ -1,0 +1,78 @@
+{{define "content"}}
+<h1>{{if .IsEdit}}Edit monitor{{else}}Add monitor{{end}}</h1>
+{{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
+<form method="post" class="card form" action="{{if .IsEdit}}/monitors/{{.Monitor.ID}}/update{{else}}/monitors{{end}}">
+<input type="hidden" name="_csrf" value="{{.Meta.CSRF}}">
+<input type="hidden" name="enabled_sent" value="1">
+<div class="grid">
+  <label>Name</label><input name="name" value="{{.Monitor.Name}}" required maxlength="120">
+  <label>Type</label>
+  <select name="type" id="type-select" {{if .IsEdit}}disabled{{end}}>
+    <option value="http" {{if eq .Monitor.Type "http"}}selected{{end}}>HTTP</option>
+    <option value="tcp" {{if eq .Monitor.Type "tcp"}}selected{{end}}>TCP port</option>
+    <option value="ping" {{if eq .Monitor.Type "ping"}}selected{{end}}>Ping</option>
+    <option value="heartbeat" {{if eq .Monitor.Type "heartbeat"}}selected{{end}}>Heartbeat (cron)</option>
+  </select>
+  {{if .IsEdit}}<input type="hidden" name="type" value="{{.Monitor.Type}}">{{end}}
+  <label>Interval (seconds)</label><input name="interval" type="number" min="20" max="604800" value="{{.Monitor.Interval}}" required>
+  <label>Timeout (seconds)</label><input name="timeout" type="number" min="1" max="120" value="{{.Monitor.Timeout}}" required>
+  <label>Retries</label><input name="retries" type="number" min="0" max="5" value="{{.Monitor.Retries}}">
+  <label>Failures before down</label><input name="failure_threshold" type="number" min="1" max="10" value="{{.Monitor.FailureThreshold}}">
+  <label>Alert cooldown (seconds)</label><input name="cooldown" type="number" min="0" max="86400" value="{{.Monitor.Cooldown}}">
+</div>
+<fieldset class="type-fieldset" data-type="http">
+  <legend>HTTP</legend>
+  <div class="grid">
+    <label>URL</label><input name="url" value="{{.HTTP.URL}}" placeholder="https://example.com/health">
+    <label>Method</label>
+    <select name="method">
+      <option value="GET" {{if eq .HTTP.Method "GET"}}selected{{end}}>GET</option>
+      <option value="HEAD" {{if eq .HTTP.Method "HEAD"}}selected{{end}}>HEAD</option>
+      <option value="POST" {{if eq .HTTP.Method "POST"}}selected{{end}}>POST</option>
+      <option value="PUT" {{if eq .HTTP.Method "PUT"}}selected{{end}}>PUT</option>
+      <option value="PATCH" {{if eq .HTTP.Method "PATCH"}}selected{{end}}>PATCH</option>
+      <option value="DELETE" {{if eq .HTTP.Method "DELETE"}}selected{{end}}>DELETE</option>
+      <option value="OPTIONS" {{if eq .HTTP.Method "OPTIONS"}}selected{{end}}>OPTIONS</option>
+    </select>
+    <label>Expected status</label><input name="expect_status" value="{{.HTTP.ExpectStatus}}" placeholder="200-299">
+    <label>Headers</label><textarea name="headers" rows="3" placeholder="X-Token: abc">{{.HeaderLines}}</textarea>
+    <label>Body</label><textarea name="body" rows="2">{{.HTTP.Body}}</textarea>
+    <label>Body contains</label><input name="body_match" value="{{.HTTP.BodyMatch}}">
+    <label>Body regex</label><input name="body_regex" value="{{.HTTP.BodyRegex}}">
+    <label>Follow redirects</label><input type="checkbox" name="follow_redirects" {{if .HTTP.Redirects}}checked{{end}}>
+  </div>
+</fieldset>
+<fieldset class="type-fieldset" data-type="tcp">
+  <legend>TCP port</legend>
+  <div class="grid">
+    <label>Host</label><input name="tcp_host" value="{{with .TCP}}{{.Host}}{{end}}">
+    <label>Port</label><input name="tcp_port" type="number" min="1" max="65535" value="{{with .TCP}}{{.Port}}{{end}}">
+  </div>
+</fieldset>
+<fieldset class="type-fieldset" data-type="ping">
+  <legend>Ping</legend>
+  <div class="grid">
+    <label>Host</label><input name="ping_host" value="{{with .Ping}}{{.Host}}{{end}}">
+  </div>
+</fieldset>
+<fieldset class="type-fieldset" data-type="heartbeat">
+  <legend>Heartbeat</legend>
+  {{if .IsEdit}}<p>Ping URL: <code>{{.PingURL}}</code> <span class="muted">call this from your job on success</span></p>{{end}}
+  <div class="grid">
+    <label>Expected period (seconds)</label><input name="period" type="number" min="60" max="604800" value="{{with .Heartbeat}}{{.Period}}{{end}}">
+    <label>Grace (seconds)</label><input name="grace" type="number" min="0" max="86400" value="{{with .Heartbeat}}{{.Grace}}{{end}}">
+  </div>
+</fieldset>
+<div class="grid">
+  <label>Show on public status page</label><input type="checkbox" name="is_public" {{if .Monitor.IsPublic}}checked{{end}}>
+  <label>Enabled</label><input type="checkbox" name="enabled" {{if .Monitor.Enabled}}checked{{end}}>
+  <label>Alert channels</label>
+  <select name="channels" multiple size="5">
+    {{$sel := .Selected}}
+    {{range .Channels}}<option value="{{.ID}}" {{if index $sel .ID}}selected{{end}}>{{.Name}} ({{.Type}})</option>{{end}}
+  </select>
+  <input type="hidden" name="channels_sent" value="1">
+</div>
+<button class="btn btn-primary" type="submit">Save</button>
+</form>
+{{end}}

@@ -1,0 +1,358 @@
+package web
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/tickwatch/tickwatch/internal/store"
+	"golang.org/x/crypto/bcrypt"
+)
+
+type pageMeta struct {
+	CSRF   string
+	IsEdit bool
+	Title  string
+}
+
+func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
+		if sess, err := s.store.Session(store.HashToken(c.Value)); err == nil && sess.ExpiresAt > time.Now().Unix() {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+	}
+	s.render(w, 200, "login", map[string]any{"Error": ""})
+}
+
+func (s *server) loginSubmit(w http.ResponseWriter, r *http.Request) {
+	if s.limiter.blocked(clientIP(r)) {
+		s.render(w, 429, "login", map[string]any{"Error": "Too many attempts. Try again in a minute."})
+		return
+	}
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+	user, err := s.store.UserByName(username)
+	if err != nil {
+		s.limiter.record(clientIP(r))
+		s.render(w, 200, "login", map[string]any{"Error": "Invalid username or password."})
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
+		s.limiter.record(clientIP(r))
+		s.render(w, 200, "login", map[string]any{"Error": "Invalid username or password."})
+		return
+	}
+	if err := s.createSession(w, user.ID); err != nil {
+		s.render(w, 500, "login", map[string]any{"Error": "Could not create session."})
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+type monitorRow struct {
+	store.Monitor
+	LatencyMS int64
+	Uptime24  float64
+	HasUptime bool
+	Spark     []int64
+	Target    string
+}
+
+func (s *server) dashboard(w http.ResponseWriter, r *http.Request) {
+	monitors, err := s.store.Monitors()
+	if err != nil {
+		http.Error(w, "load monitors failed", 500)
+		return
+	}
+	sess := sessionFrom(r.Context())
+	rows := make([]monitorRow, 0, len(monitors))
+	latest, _ := s.store.LatestResults()
+	uptime, _ := s.store.UptimeBatch(time.Now().Unix() - 86400)
+	for _, m := range monitors {
+		row := monitorRow{Monitor: m, Target: m.Target()}
+		if res, ok := latest[m.ID]; ok && res.OK {
+			row.LatencyMS = res.LatencyMS
+		}
+		if stat, ok := uptime[m.ID]; ok && stat.Total > 0 {
+			row.Uptime24 = stat.Percent()
+			row.HasUptime = true
+		}
+		recent, _ := s.store.RecentResults(m.ID, 30)
+		for i := len(recent) - 1; i >= 0; i-- {
+			if recent[i].OK {
+				row.Spark = append(row.Spark, recent[i].LatencyMS)
+			}
+		}
+		rows = append(rows, row)
+	}
+	s.render(w, 200, "monitors", map[string]any{
+		"Meta":     pageMeta{CSRF: sess.csrf, Title: "Monitors"},
+		"Monitors": rows,
+	})
+}
+
+func (s *server) monitorDetail(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	m, err := s.store.Monitor(id)
+	if errors.Is(err, store.ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "load monitor failed", 500)
+		return
+	}
+	results, _, _ := s.store.Results(m.ID, 1, 50)
+	incidents, _, _ := s.store.Incidents(m.ID, 1, 20)
+	series, _ := s.store.Series(m.ID, time.Now().Unix()-86400, 300)
+	channels, _ := s.store.MonitorChannels(m.ID)
+	sess := sessionFrom(r.Context())
+
+	var pingURL string
+	if m.Type == store.TypeHeartbeat && m.HeartbeatToken != "" {
+		pingURL = "/ping/" + m.HeartbeatToken
+	}
+	var sslDays int64
+	if m.SSLExpiresAt > 0 {
+		sslDays = (m.SSLExpiresAt - time.Now().Unix()) / 86400
+	}
+	s.render(w, 200, "monitor_detail", map[string]any{
+		"Meta":      pageMeta{CSRF: sess.csrf, Title: m.Name},
+		"Monitor":   m,
+		"Target":    m.Target(),
+		"PingURL":   pingURL,
+		"Results":   results,
+		"Incidents": incidents,
+		"Series":    series,
+		"Channels":  channels,
+		"SSLDays":   sslDays,
+	})
+}
+
+func (s *server) monitorForm(w http.ResponseWriter, r *http.Request) {
+	sess := sessionFrom(r.Context())
+	meta := pageMeta{CSRF: sess.csrf, Title: "Add monitor"}
+	data := map[string]any{
+		"Meta":     meta,
+		"IsEdit":   false,
+		"Monitor":  &store.Monitor{Interval: 60, Timeout: 10, FailureThreshold: 3, Cooldown: 300},
+		"HTTP":     store.HTTPConfig{Method: "GET", ExpectStatus: "200-299"},
+		"Channels": s.channelList(),
+		"Selected": map[int64]bool{},
+	}
+	if idStr := chi.URLParam(r, "id"); idStr != "" {
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		m, err := s.store.Monitor(id)
+		if errors.Is(err, store.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		if err != nil {
+			http.Error(w, "load monitor failed", 500)
+			return
+		}
+		data["IsEdit"] = true
+		data["Monitor"] = m
+		data["Target"] = m.Target()
+		switch m.Type {
+		case store.TypeHTTP:
+			if hc, err := store.ParseHTTPConfig(m.Config); err == nil {
+				data["HTTP"] = hc
+				data["HeaderLines"] = headerLines(hc.Headers)
+			}
+		case store.TypeTCP:
+			if tc, err := store.ParseTCPConfig(m.Config); err == nil {
+				data["TCP"] = tc
+			}
+		case store.TypePing:
+			if pc, err := store.ParsePingConfig(m.Config); err == nil {
+				data["Ping"] = pc
+			}
+		case store.TypeHeartbeat:
+			if hb, err := store.ParseHeartbeatConfig(m.Config); err == nil {
+				data["Heartbeat"] = hb
+			}
+			data["PingURL"] = "/ping/" + m.HeartbeatToken
+		}
+		linked, _ := s.store.MonitorChannels(m.ID)
+		selected := map[int64]bool{}
+		for _, c := range linked {
+			selected[c.ID] = true
+		}
+		data["Selected"] = selected
+		meta.Title = "Edit " + m.Name
+		data["Meta"] = meta
+	}
+	s.render(w, 200, "monitor_form", data)
+}
+
+func headerLines(headers map[string]string) string {
+	out := ""
+	for k, v := range headers {
+		out += k + ": " + v + "\n"
+	}
+	return out
+}
+
+func (s *server) channelList() []store.Channel {
+	channels, _ := s.store.Channels()
+	return channels
+}
+
+func (s *server) channelsPage(w http.ResponseWriter, r *http.Request) {
+	sess := sessionFrom(r.Context())
+	data := map[string]any{
+		"Meta":     pageMeta{CSRF: sess.csrf, Title: "Alert channels"},
+		"Channels": s.channelsListForPage(),
+		"EditChannel": nil,
+	}
+	if editID := r.URL.Query().Get("edit"); editID != "" {
+		id, err := strconv.ParseInt(editID, 10, 64)
+		if err == nil {
+			c, err := s.store.Channel(id)
+			if err == nil {
+				data["EditChannel"] = c
+				data["Cfg"] = cfgForForm(c)
+			}
+		}
+	}
+	s.render(w, 200, "channels", data)
+}
+
+func cfgForForm(c *store.Channel) map[string]any {
+	var m map[string]any
+	if err := json.Unmarshal(c.Config, &m); err != nil || m == nil {
+		return map[string]any{}
+	}
+	out := map[string]any{}
+	for k, v := range m {
+		out[k] = v
+	}
+	if to, ok := m["to"].([]any); ok {
+		var parts []string
+		for _, item := range to {
+			if s, ok := item.(string); ok {
+				parts = append(parts, s)
+			}
+		}
+		out["to_join"] = strings.Join(parts, ", ")
+	}
+	for _, key := range channelSecretKeys(c.Type) {
+		if v, ok := out[key].(string); ok && v != "" {
+			out[key] = "*****"
+		}
+	}
+	return out
+}
+
+func (s *server) statusPage(w http.ResponseWriter, r *http.Request) {
+	monitors, err := s.store.PublicMonitors()
+	if err != nil {
+		http.Error(w, "load monitors failed", 500)
+		return
+	}
+	now := time.Now().Unix()
+	latest, _ := s.store.LatestResults()
+	rows := make([]map[string]any, 0, len(monitors))
+	for _, m := range monitors {
+		row := map[string]any{
+			"Monitor": m,
+			"Target":  m.Target(),
+		}
+		if res, ok := latest[m.ID]; ok && res.OK {
+			row["LatencyMS"] = res.LatencyMS
+		}
+		for _, win := range []struct {
+			name  string
+			since int64
+		}{{"u24", now - 86400}, {"u7", now - 7*86400}, {"u30", now - 30*86400}} {
+			stat, _ := s.store.Uptime(m.ID, win.since)
+			if stat.Total > 0 {
+				row[win.name] = stat.Percent()
+			} else {
+				row[win.name] = nil
+			}
+		}
+		rows = append(rows, row)
+	}
+	s.render(w, 200, "status", map[string]any{
+		"Meta":     pageMeta{Title: "Status"},
+		"Monitors": rows,
+	})
+}
+
+func (s *server) dashState(w http.ResponseWriter, r *http.Request) {
+	monitors, err := s.store.Monitors()
+	if err != nil {
+		writeWErr(w, 500, "internal", "load monitors failed")
+		return
+	}
+	latest, _ := s.store.LatestResults()
+	uptime, _ := s.store.UptimeBatch(time.Now().Unix() - 86400)
+	items := make([]map[string]any, 0, len(monitors))
+	for _, m := range monitors {
+		item := map[string]any{
+			"id":      m.ID,
+			"name":    m.Name,
+			"type":    m.Type,
+			"status":  m.Status,
+			"enabled": m.Enabled,
+		}
+		if res, ok := latest[m.ID]; ok && res.OK {
+			item["latency_ms"] = res.LatencyMS
+		}
+		if stat, ok := uptime[m.ID]; ok && stat.Total > 0 {
+			item["uptime_24h"] = stat.Percent()
+		}
+		if m.Enabled {
+			if m.Type == store.TypeHeartbeat {
+				item["next_deadline_at"] = m.NextDeadlineAt
+			} else {
+				item["next_run_at"] = m.NextRunAt
+			}
+		}
+		items = append(items, item)
+	}
+	writeJSONOK(w, map[string]any{"items": items, "time": time.Now().Unix()})
+}
+
+func (s *server) dashSeries(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeWErr(w, 400, "invalid_id", "monitor id must be a positive integer")
+		return
+	}
+	hours := 24
+	if h := r.URL.Query().Get("hours"); h != "" {
+		if n, err := strconv.Atoi(h); err == nil && n >= 1 && n <= 720 {
+			hours = n
+		}
+	}
+	points, err := s.store.Series(id, time.Now().Unix()-int64(hours)*3600, 400)
+	if err != nil {
+		writeWErr(w, 500, "internal", "load series failed")
+		return
+	}
+	if points == nil {
+		points = []store.Point{}
+	}
+	writeJSONOK(w, map[string]any{"points": points})
+}
+
+func writeJSONOK(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(v)
+}
