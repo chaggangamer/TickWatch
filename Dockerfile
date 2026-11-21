@@ -16,7 +16,11 @@ COPY --from=build /out/tickwatch /tickwatch
 COPY --from=build --chown=65532:65532 /out/data /data
 COPY --from=alpine:3.21 /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 USER 65532:65532
+WORKDIR /data
+ENV TICKWATCH_DB_PATH=/data/tickwatch.db
 EXPOSE 8080
 VOLUME /data
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/tickwatch", "healthcheck", "http://localhost:8080/healthz"]
 ENTRYPOINT ["/tickwatch"]
 CMD ["serve"]
