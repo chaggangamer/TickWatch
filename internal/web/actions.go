@@ -258,13 +258,15 @@ func (s *server) linkChannels(r *http.Request, monitorID int64) {
 	if r.FormValue("channels_sent") == "" {
 		return
 	}
+	seen := map[int64]bool{}
 	var ids []int64
 	for _, part := range r.Form["channels"] {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
-		if id, err := strconv.ParseInt(part, 10, 64); err == nil {
+		if id, err := strconv.ParseInt(part, 10, 64); err == nil && !seen[id] {
+			seen[id] = true
 			ids = append(ids, id)
 		}
 	}

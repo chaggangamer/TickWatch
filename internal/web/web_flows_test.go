@@ -417,3 +417,109 @@ func TestBrowserFormWithoutTypeIsRejected(t *testing.T) {
 		t.Errorf("monitors created = %d, want 0", len(monitors))
 	}
 }
+
+func TestChannelsCheckboxLinking(t *testing.T) {
+	h, s := newWeb(t)
+	session, csrf := loginSession(t, h, s)
+
+	for _, name := range []string{"ops", "oncall"} {
+		if code := postChannel(t, h, session, csrf, name); code != 303 && code != 302 {
+			t.Fatalf("channel create = %d", code)
+		}
+	}
+
+	form := browserForm(csrf, map[string]string{
+		"name": "with-channels", "url": "https://example.com",
+	})
+	form.Add("channels", "1")
+	form.Add("channels", "2")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, authedRequest(session, "/monitors", form))
+	if rec.Code != 303 && rec.Code != 302 {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	monitors, _ := s.Monitors()
+	if len(monitors) != 1 {
+		t.Fatalf("monitors = %d", len(monitors))
+	}
+	linked, _ := s.MonitorChannels(monitors[0].ID)
+	if len(linked) != 2 {
+		t.Errorf("linked channels = %d, want 2", len(linked))
+	}
+}
+
+func postChannel(t *testing.T, h http.Handler, session, csrf, name string) int {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, authedRequest(session, "/channels", url.Values{
+		"_csrf": {csrf}, "type": {"webhook"}, "name": {name},
+		"url": {"https://example.com/" + name},
+	}))
+	return rec.Code
+}
+
+func TestMonitorFormChannelEmptyState(t *testing.T) {
+	h, s := newWeb(t)
+	session, _ := loginSession(t, h, s)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, authedGet(session, "/monitors/new"))
+	if rec.Code != 200 {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "No channels yet") {
+		t.Error("empty channel message missing")
+	}
+	if !strings.Contains(body, `href="/channels"`) {
+		t.Error("link to /channels missing")
+	}
+	if strings.Contains(body, "select[multiple]") || strings.Contains(body, `<select id="f-channels"`) {
+		t.Error("multi-select still rendered")
+	}
+}
+
+func TestMonitorFormRendersCheckboxes(t *testing.T) {
+	h, s := newWeb(t)
+	session, csrf := loginSession(t, h, s)
+	if code := postChannel(t, h, session, csrf, "ops"); code != 303 && code != 302 {
+		t.Fatalf("channel create = %d", code)
+	}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, authedGet(session, "/monitors/new"))
+	body := rec.Body.String()
+	if !strings.Contains(body, `type="checkbox" name="channels" value="1"`) {
+		t.Error("channel checkbox missing")
+	}
+	if strings.Contains(body, "hold ctrl or cmd") {
+		t.Error("stale multiselect hint still present")
+	}
+}
+
+func TestAdvancedOpenOnValidationError(t *testing.T) {
+	h, s := newWeb(t)
+	session, csrf := loginSession(t, h, s)
+
+	form := browserForm(csrf, map[string]string{"retries": "99"})
+	form.Set("retries", "99")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, authedRequest(session, "/monitors", form))
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `<details class="advanced" open>`) {
+		t.Error("advanced section not auto-opened on error")
+	}
+	if !strings.Contains(body, "must be between 0 and 5") {
+		t.Error("retries field error missing")
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, authedGet(session, "/monitors/new"))
+	if strings.Contains(rec.Body.String(), `<details class="advanced" open>`) {
+		t.Error("advanced section should be closed by default")
+	}
+}
+
