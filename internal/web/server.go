@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/chaggangamer/tickwatch/internal/alert"
 	"github.com/chaggangamer/tickwatch/internal/incident"
 	"github.com/chaggangamer/tickwatch/internal/scheduler"
 	"github.com/chaggangamer/tickwatch/internal/store"
+	"github.com/go-chi/chi/v5"
 )
 
 //go:embed templates/*.html

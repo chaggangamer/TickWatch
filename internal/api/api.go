@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/chaggangamer/tickwatch/internal/alert"
 	"github.com/chaggangamer/tickwatch/internal/scheduler"
 	"github.com/chaggangamer/tickwatch/internal/store"
+	"github.com/go-chi/chi/v5"
 )
 
 type Deps struct {

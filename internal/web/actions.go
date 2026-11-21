@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/chaggangamer/tickwatch/internal/store"
+	"github.com/go-chi/chi/v5"
 )
 
 func parseHeaders(lines string) (map[string]string, error) {
