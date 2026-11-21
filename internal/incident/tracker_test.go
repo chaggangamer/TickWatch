@@ -19,7 +19,7 @@ func testTracker(t *testing.T) (*Tracker, store.Store, store.Monitor) {
 	t.Cleanup(func() { s.Close() })
 	m := &store.Monitor{
 		Type: store.TypeHTTP, Name: "web",
-		Config: []byte(`{"url":"https://example.com","method":"GET"}`),
+		Config:   []byte(`{"url":"https://example.com","method":"GET"}`),
 		Interval: 60, Timeout: 10, FailureThreshold: 3, Cooldown: 300, Enabled: true,
 		Status: store.StatusUp, CreatedAt: time.Now().Unix(), UpdatedAt: time.Now().Unix(),
 		NextRunAt: time.Now().Unix(),

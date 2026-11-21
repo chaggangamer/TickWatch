@@ -231,3 +231,43 @@ func TestUnknownType(t *testing.T) {
 		t.Errorf("res = %+v", res)
 	}
 }
+
+func TestInvalidConfigPaths(t *testing.T) {
+	r := New(Options{})
+	cases := []struct {
+		name string
+		mon  store.Monitor
+		want string
+	}{
+		{"http bad json", store.Monitor{Type: store.TypeHTTP, Config: []byte(`{`)}, "invalid config"},
+		{"tcp bad json", store.Monitor{Type: store.TypeTCP, Config: []byte(`nope`)}, "invalid config"},
+		{"ping bad json", store.Monitor{Type: store.TypePing, Config: []byte(`[1]`)}, "invalid config"},
+		{"http bad url", store.Monitor{Type: store.TypeHTTP, Config: cfgJSON(t, store.HTTPConfig{URL: "ht tp://x"})}, "invalid request"},
+		{"tcp bad port", store.Monitor{Type: store.TypeTCP, Config: []byte(`{"host":"a","port":0}`)}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := runCheck(t, r, tc.mon, 5*time.Second)
+			if res.OK {
+				t.Errorf("expected failure, got %+v", res)
+			}
+			if tc.want != "" && !strings.Contains(res.Error, tc.want) {
+				t.Errorf("error = %q, want contains %q", res.Error, tc.want)
+			}
+		})
+	}
+}
+
+func TestRunWithoutDeadline(t *testing.T) {
+	r := New(Options{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {}))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// Run adds its own fallback deadline when none exists; here one exists so the
+	// context governs. Cover the dispatch path directly.
+	res := r.Run(ctx, store.Monitor{Type: store.TypeHTTP, Config: cfgJSON(t, store.HTTPConfig{URL: srv.URL})})
+	if !res.OK {
+		t.Errorf("ok check failed: %q", res.Error)
+	}
+}

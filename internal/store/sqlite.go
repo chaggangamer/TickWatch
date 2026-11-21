@@ -14,7 +14,7 @@ import (
 
 var ErrNotFound = errors.New("not found")
 
-type sqliteStore struct {
+type DB struct {
 	db *sql.DB
 }
 
@@ -27,7 +27,7 @@ func Open(path string, log *slog.Logger) (Store, error) {
 	}
 	db.SetMaxOpenConns(4)
 	db.SetMaxIdleConns(4)
-	s := &sqliteStore{db: db}
+	s := &DB{db: db}
 	if err := migrate(db, log); err != nil {
 		db.Close()
 		return nil, err
@@ -35,8 +35,15 @@ func Open(path string, log *slog.Logger) (Store, error) {
 	return s, nil
 }
 
-func (s *sqliteStore) Close() error {
+func (s *DB) Close() error {
 	return s.db.Close()
+}
+
+func (s *DB) Ping() error {
+	if err := s.db.Ping(); err != nil {
+		return fmt.Errorf("database ping: %w", err)
+	}
+	return nil
 }
 
 const monitorCols = `id, type, name, config, interval_seconds, timeout_seconds, retries,
@@ -55,7 +62,7 @@ func scanMonitor(scan func(dest ...any) error) (Monitor, error) {
 	return m, err
 }
 
-func (s *sqliteStore) CreateMonitor(m *Monitor) error {
+func (s *DB) CreateMonitor(m *Monitor) error {
 	var hb any
 	if m.HeartbeatToken != "" {
 		hb = m.HeartbeatToken
@@ -79,7 +86,7 @@ func (s *sqliteStore) CreateMonitor(m *Monitor) error {
 	return nil
 }
 
-func (s *sqliteStore) UpdateMonitor(m *Monitor) error {
+func (s *DB) UpdateMonitor(m *Monitor) error {
 	m.UpdatedAt = time.Now().Unix()
 	res, err := s.db.Exec(`UPDATE monitors SET name=?, config=?, interval_seconds=?,
 		timeout_seconds=?, retries=?, failure_threshold=?, cooldown_seconds=?,
@@ -95,7 +102,7 @@ func (s *sqliteStore) UpdateMonitor(m *Monitor) error {
 	return nil
 }
 
-func (s *sqliteStore) DeleteMonitor(id int64) error {
+func (s *DB) DeleteMonitor(id int64) error {
 	res, err := s.db.Exec(`DELETE FROM monitors WHERE id=?`, id)
 	if err != nil {
 		return fmt.Errorf("delete monitor: %w", err)
@@ -106,7 +113,7 @@ func (s *sqliteStore) DeleteMonitor(id int64) error {
 	return nil
 }
 
-func (s *sqliteStore) Monitor(id int64) (*Monitor, error) {
+func (s *DB) Monitor(id int64) (*Monitor, error) {
 	m, err := scanMonitor(s.db.QueryRow(`SELECT `+monitorCols+` FROM monitors WHERE id=?`, id).Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -117,7 +124,7 @@ func (s *sqliteStore) Monitor(id int64) (*Monitor, error) {
 	return &m, nil
 }
 
-func (s *sqliteStore) MonitorByToken(token string) (*Monitor, error) {
+func (s *DB) MonitorByToken(token string) (*Monitor, error) {
 	m, err := scanMonitor(s.db.QueryRow(
 		`SELECT `+monitorCols+` FROM monitors WHERE heartbeat_token=? AND type='heartbeat'`, token).Scan)
 	if err != nil {
@@ -129,7 +136,7 @@ func (s *sqliteStore) MonitorByToken(token string) (*Monitor, error) {
 	return &m, nil
 }
 
-func (s *sqliteStore) queryMonitors(query string, args ...any) ([]Monitor, error) {
+func (s *DB) queryMonitors(query string, args ...any) ([]Monitor, error) {
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query monitors: %w", err)
@@ -146,33 +153,33 @@ func (s *sqliteStore) queryMonitors(query string, args ...any) ([]Monitor, error
 	return out, rows.Err()
 }
 
-func (s *sqliteStore) Monitors() ([]Monitor, error) {
+func (s *DB) Monitors() ([]Monitor, error) {
 	return s.queryMonitors(`SELECT ` + monitorCols + ` FROM monitors ORDER BY name`)
 }
 
-func (s *sqliteStore) PublicMonitors() ([]Monitor, error) {
+func (s *DB) PublicMonitors() ([]Monitor, error) {
 	return s.queryMonitors(`SELECT ` + monitorCols + ` FROM monitors WHERE is_public=1 AND enabled=1 ORDER BY name`)
 }
 
-func (s *sqliteStore) DueMonitors(now int64, limit int) ([]Monitor, error) {
+func (s *DB) DueMonitors(now int64, limit int) ([]Monitor, error) {
 	return s.queryMonitors(`SELECT `+monitorCols+` FROM monitors
 		WHERE enabled=1 AND type != 'heartbeat' AND next_run_at <= ?
 		ORDER BY next_run_at LIMIT ?`, now, limit)
 }
 
-func (s *sqliteStore) HeartbeatsDue(now int64) ([]Monitor, error) {
+func (s *DB) HeartbeatsDue(now int64) ([]Monitor, error) {
 	return s.queryMonitors(`SELECT `+monitorCols+` FROM monitors
 		WHERE enabled=1 AND type='heartbeat' AND status='up' AND next_deadline_at > 0 AND next_deadline_at <= ?
 		ORDER BY next_deadline_at LIMIT 200`, now)
 }
 
-func (s *sqliteStore) HeartbeatsStale(now int64, minAge int64) ([]Monitor, error) {
+func (s *DB) HeartbeatsStale(now int64, minAge int64) ([]Monitor, error) {
 	return s.queryMonitors(`SELECT `+monitorCols+` FROM monitors
 		WHERE enabled=1 AND type='heartbeat' AND status='down' AND last_check_at <= ?
 		ORDER BY last_check_at LIMIT 200`, now-minAge)
 }
 
-func (s *sqliteStore) SaveRuntime(m *Monitor) error {
+func (s *DB) SaveRuntime(m *Monitor) error {
 	_, err := s.db.Exec(`UPDATE monitors SET status=?, ssl_expires_at=?, last_check_at=?,
 		next_run_at=?, last_ping_at=?, next_deadline_at=? WHERE id=?`,
 		m.Status, m.SSLExpiresAt, m.LastCheckAt, m.NextRunAt, m.LastPingAt, m.NextDeadlineAt, m.ID)
@@ -182,7 +189,7 @@ func (s *sqliteStore) SaveRuntime(m *Monitor) error {
 	return nil
 }
 
-func (s *sqliteStore) RecordResult(r *CheckResult) error {
+func (s *DB) RecordResult(r *CheckResult) error {
 	res, err := s.db.Exec(`INSERT INTO check_results (monitor_id, ok, status_code, latency_ms, error, created_at)
 		VALUES (?,?,?,?,?,?)`,
 		r.MonitorID, r.OK, r.StatusCode, r.LatencyMS, r.Error, r.CreatedAt)
@@ -206,7 +213,7 @@ func scanResult(scan func(dest ...any) error) (CheckResult, error) {
 	return r, err
 }
 
-func (s *sqliteStore) Results(monitorID int64, page, perPage int) ([]CheckResult, int64, error) {
+func (s *DB) Results(monitorID int64, page, perPage int) ([]CheckResult, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -234,7 +241,7 @@ func (s *sqliteStore) Results(monitorID int64, page, perPage int) ([]CheckResult
 	return out, total, rows.Err()
 }
 
-func (s *sqliteStore) RecentResults(monitorID int64, limit int) ([]CheckResult, error) {
+func (s *DB) RecentResults(monitorID int64, limit int) ([]CheckResult, error) {
 	rows, err := s.db.Query(`SELECT `+resultCols+` FROM check_results WHERE monitor_id=?
 		ORDER BY id DESC LIMIT ?`, monitorID, limit)
 	if err != nil {
@@ -252,7 +259,7 @@ func (s *sqliteStore) RecentResults(monitorID int64, limit int) ([]CheckResult, 
 	return out, rows.Err()
 }
 
-func (s *sqliteStore) LatestResults() (map[int64]CheckResult, error) {
+func (s *DB) LatestResults() (map[int64]CheckResult, error) {
 	rows, err := s.db.Query(`SELECT ` + resultColsRef + ` FROM check_results r
 		JOIN (SELECT monitor_id, MAX(id) AS rid FROM check_results GROUP BY monitor_id) last
 		ON r.id = last.rid`)
@@ -271,7 +278,7 @@ func (s *sqliteStore) LatestResults() (map[int64]CheckResult, error) {
 	return out, rows.Err()
 }
 
-func (s *sqliteStore) Uptime(monitorID int64, since int64) (UptimeStat, error) {
+func (s *DB) Uptime(monitorID int64, since int64) (UptimeStat, error) {
 	var stat UptimeStat
 	if err := s.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(ok),0) FROM check_results
 		WHERE monitor_id=? AND created_at>=?`, monitorID, since).Scan(&stat.Total, &stat.OK); err != nil {
@@ -287,7 +294,7 @@ func (s *sqliteStore) Uptime(monitorID int64, since int64) (UptimeStat, error) {
 	return stat, nil
 }
 
-func (s *sqliteStore) UptimeBatch(since int64) (map[int64]UptimeStat, error) {
+func (s *DB) UptimeBatch(since int64) (map[int64]UptimeStat, error) {
 	out := map[int64]UptimeStat{}
 	merge := func(rows *sql.Rows) error {
 		for rows.Next() {
@@ -325,7 +332,7 @@ func (s *sqliteStore) UptimeBatch(since int64) (map[int64]UptimeStat, error) {
 	return out, nil
 }
 
-func (s *sqliteStore) Series(monitorID int64, since int64, maxPoints int) ([]Point, error) {
+func (s *DB) Series(monitorID int64, since int64, maxPoints int) ([]Point, error) {
 	if maxPoints < 10 {
 		maxPoints = 10
 	}
@@ -394,7 +401,7 @@ func (s *sqliteStore) Series(monitorID int64, since int64, maxPoints int) ([]Poi
 	return points, nil
 }
 
-func (s *sqliteStore) OpenIncident(monitorID int64, startedAt int64, reason string) (int64, error) {
+func (s *DB) OpenIncident(monitorID int64, startedAt int64, reason string) (int64, error) {
 	res, err := s.db.Exec(`INSERT INTO incidents (monitor_id, started_at, reason) VALUES (?,?,?)`,
 		monitorID, startedAt, reason)
 	if err != nil {
@@ -407,7 +414,7 @@ func (s *sqliteStore) OpenIncident(monitorID int64, startedAt int64, reason stri
 	return id, nil
 }
 
-func (s *sqliteStore) CloseIncidents(monitorID int64, endedAt int64) error {
+func (s *DB) CloseIncidents(monitorID int64, endedAt int64) error {
 	_, err := s.db.Exec(`UPDATE incidents SET ended_at=? WHERE monitor_id=? AND ended_at IS NULL`,
 		endedAt, monitorID)
 	if err != nil {
@@ -424,15 +431,15 @@ func scanIncident(scan func(dest ...any) error) (Incident, error) {
 	return i, err
 }
 
-func (s *sqliteStore) Incidents(monitorID int64, page, perPage int) ([]Incident, int64, error) {
+func (s *DB) Incidents(monitorID int64, page, perPage int) ([]Incident, int64, error) {
 	return s.queryIncidents(`WHERE monitor_id=?`, monitorID, page, perPage)
 }
 
-func (s *sqliteStore) AllIncidents(page, perPage int) ([]Incident, int64, error) {
+func (s *DB) AllIncidents(page, perPage int) ([]Incident, int64, error) {
 	return s.queryIncidents(``, 0, page, perPage)
 }
 
-func (s *sqliteStore) queryIncidents(where string, monitorID int64, page, perPage int) ([]Incident, int64, error) {
+func (s *DB) queryIncidents(where string, monitorID int64, page, perPage int) ([]Incident, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -467,7 +474,7 @@ func (s *sqliteStore) queryIncidents(where string, monitorID int64, page, perPag
 	return out, total, rows.Err()
 }
 
-func (s *sqliteStore) OpenIncidents() ([]Incident, error) {
+func (s *DB) OpenIncidents() ([]Incident, error) {
 	rows, err := s.db.Query(`SELECT ` + incidentCols + ` FROM incidents WHERE ended_at IS NULL ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("query open incidents: %w", err)
@@ -492,7 +499,7 @@ func scanChannel(scan func(dest ...any) error) (Channel, error) {
 	return c, err
 }
 
-func (s *sqliteStore) CreateChannel(c *Channel) error {
+func (s *DB) CreateChannel(c *Channel) error {
 	res, err := s.db.Exec(`INSERT INTO channels (type, name, config, created_at) VALUES (?,?,?,?)`,
 		c.Type, c.Name, string(c.Config), c.CreatedAt)
 	if err != nil {
@@ -505,7 +512,7 @@ func (s *sqliteStore) CreateChannel(c *Channel) error {
 	return nil
 }
 
-func (s *sqliteStore) UpdateChannel(c *Channel) error {
+func (s *DB) UpdateChannel(c *Channel) error {
 	res, err := s.db.Exec(`UPDATE channels SET type=?, name=?, config=? WHERE id=?`,
 		c.Type, c.Name, string(c.Config), c.ID)
 	if err != nil {
@@ -517,7 +524,7 @@ func (s *sqliteStore) UpdateChannel(c *Channel) error {
 	return nil
 }
 
-func (s *sqliteStore) DeleteChannel(id int64) error {
+func (s *DB) DeleteChannel(id int64) error {
 	res, err := s.db.Exec(`DELETE FROM channels WHERE id=?`, id)
 	if err != nil {
 		return fmt.Errorf("delete channel: %w", err)
@@ -528,7 +535,7 @@ func (s *sqliteStore) DeleteChannel(id int64) error {
 	return nil
 }
 
-func (s *sqliteStore) Channel(id int64) (*Channel, error) {
+func (s *DB) Channel(id int64) (*Channel, error) {
 	c, err := scanChannel(s.db.QueryRow(`SELECT `+channelCols+` FROM channels WHERE id=?`, id).Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -539,7 +546,7 @@ func (s *sqliteStore) Channel(id int64) (*Channel, error) {
 	return &c, nil
 }
 
-func (s *sqliteStore) Channels() ([]Channel, error) {
+func (s *DB) Channels() ([]Channel, error) {
 	rows, err := s.db.Query(`SELECT ` + channelCols + ` FROM channels ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("query channels: %w", err)
@@ -556,7 +563,7 @@ func (s *sqliteStore) Channels() ([]Channel, error) {
 	return out, rows.Err()
 }
 
-func (s *sqliteStore) MonitorChannels(monitorID int64) ([]Channel, error) {
+func (s *DB) MonitorChannels(monitorID int64) ([]Channel, error) {
 	rows, err := s.db.Query(`SELECT c.`+channelCols+` FROM channels c
 		JOIN monitor_channels mc ON mc.channel_id = c.id
 		WHERE mc.monitor_id=? ORDER BY c.name`, monitorID)
@@ -575,7 +582,7 @@ func (s *sqliteStore) MonitorChannels(monitorID int64) ([]Channel, error) {
 	return out, rows.Err()
 }
 
-func (s *sqliteStore) SetMonitorChannels(monitorID int64, ids []int64) error {
+func (s *DB) SetMonitorChannels(monitorID int64, ids []int64) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -593,12 +600,12 @@ func (s *sqliteStore) SetMonitorChannels(monitorID int64, ids []int64) error {
 	return tx.Commit()
 }
 
-func (s *sqliteStore) DownMonitors() ([]Monitor, error) {
+func (s *DB) DownMonitors() ([]Monitor, error) {
 	return s.queryMonitors(`SELECT ` + monitorCols + ` FROM monitors
 		WHERE enabled=1 AND status='down' ORDER BY id`)
 }
 
-func (s *sqliteStore) LastAlert(monitorID, channelID int64) (at int64, incidentID int64, ok bool, err error) {
+func (s *DB) LastAlert(monitorID, channelID int64) (at int64, incidentID int64, ok bool, err error) {
 	err = s.db.QueryRow(`SELECT last_sent_at, last_incident_id FROM alert_state WHERE monitor_id=? AND channel_id=?`,
 		monitorID, channelID).Scan(&at, &incidentID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -610,7 +617,7 @@ func (s *sqliteStore) LastAlert(monitorID, channelID int64) (at int64, incidentI
 	return at, incidentID, true, nil
 }
 
-func (s *sqliteStore) SaveAlert(monitorID, channelID, at int64, incidentID int64) error {
+func (s *DB) SaveAlert(monitorID, channelID, at int64, incidentID int64) error {
 	_, err := s.db.Exec(`INSERT INTO alert_state (monitor_id, channel_id, last_sent_at, last_incident_id) VALUES (?,?,?,?)
 		ON CONFLICT (monitor_id, channel_id) DO UPDATE SET
 			last_sent_at=excluded.last_sent_at,
@@ -622,12 +629,12 @@ func (s *sqliteStore) SaveAlert(monitorID, channelID, at int64, incidentID int64
 	return nil
 }
 
-func (s *sqliteStore) SSLAlertTargets() ([]Monitor, error) {
+func (s *DB) SSLAlertTargets() ([]Monitor, error) {
 	return s.queryMonitors(`SELECT ` + monitorCols + ` FROM monitors
 		WHERE enabled=1 AND type='http' AND ssl_expires_at > 0`)
 }
 
-func (s *sqliteStore) SSLAlerted(monitorID int64, days int) (bool, error) {
+func (s *DB) SSLAlerted(monitorID int64, days int) (bool, error) {
 	var one int
 	err := s.db.QueryRow(`SELECT 1 FROM ssl_alerts WHERE monitor_id=? AND days=?`,
 		monitorID, days).Scan(&one)
@@ -640,7 +647,7 @@ func (s *sqliteStore) SSLAlerted(monitorID int64, days int) (bool, error) {
 	return true, nil
 }
 
-func (s *sqliteStore) MarkSSLAlert(monitorID int64, days int, at int64) error {
+func (s *DB) MarkSSLAlert(monitorID int64, days int, at int64) error {
 	_, err := s.db.Exec(`INSERT INTO ssl_alerts (monitor_id, days, sent_at) VALUES (?,?,?)
 		ON CONFLICT (monitor_id, days) DO UPDATE SET sent_at=excluded.sent_at`,
 		monitorID, days, at)
@@ -650,7 +657,7 @@ func (s *sqliteStore) MarkSSLAlert(monitorID int64, days int, at int64) error {
 	return nil
 }
 
-func (s *sqliteStore) ClearSSLAlerts(monitorID int64, remainingDays int) error {
+func (s *DB) ClearSSLAlerts(monitorID int64, remainingDays int) error {
 	_, err := s.db.Exec(`DELETE FROM ssl_alerts WHERE monitor_id=? AND days < ?`, monitorID, remainingDays)
 	if err != nil {
 		return fmt.Errorf("clear ssl alerts: %w", err)
@@ -658,7 +665,7 @@ func (s *sqliteStore) ClearSSLAlerts(monitorID int64, remainingDays int) error {
 	return nil
 }
 
-func (s *sqliteStore) UserCount() (int, error) {
+func (s *DB) UserCount() (int, error) {
 	var n int
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count users: %w", err)
@@ -666,7 +673,7 @@ func (s *sqliteStore) UserCount() (int, error) {
 	return n, nil
 }
 
-func (s *sqliteStore) CreateUser(u *User) error {
+func (s *DB) CreateUser(u *User) error {
 	res, err := s.db.Exec(`INSERT INTO users (username, password_hash, created_at) VALUES (?,?,?)`,
 		u.Username, u.PasswordHash, u.CreatedAt)
 	if err != nil {
@@ -679,7 +686,7 @@ func (s *sqliteStore) CreateUser(u *User) error {
 	return nil
 }
 
-func (s *sqliteStore) UserByName(name string) (*User, error) {
+func (s *DB) UserByName(name string) (*User, error) {
 	var u User
 	err := s.db.QueryRow(`SELECT id, username, password_hash, created_at FROM users WHERE username=?`,
 		name).Scan(&u.ID, &u.Username, &u.PasswordHash, &u.CreatedAt)
@@ -692,7 +699,7 @@ func (s *sqliteStore) UserByName(name string) (*User, error) {
 	return &u, nil
 }
 
-func (s *sqliteStore) CreateSession(sess *Session) error {
+func (s *DB) CreateSession(sess *Session) error {
 	_, err := s.db.Exec(`INSERT INTO sessions (token_hash, user_id, csrf_token, expires_at) VALUES (?,?,?,?)`,
 		sess.TokenHash, sess.UserID, sess.CSRFToken, sess.ExpiresAt)
 	if err != nil {
@@ -701,7 +708,7 @@ func (s *sqliteStore) CreateSession(sess *Session) error {
 	return nil
 }
 
-func (s *sqliteStore) Session(tokenHash string) (*Session, error) {
+func (s *DB) Session(tokenHash string) (*Session, error) {
 	var sess Session
 	err := s.db.QueryRow(`SELECT token_hash, user_id, csrf_token, expires_at FROM sessions WHERE token_hash=?`,
 		tokenHash).Scan(&sess.TokenHash, &sess.UserID, &sess.CSRFToken, &sess.ExpiresAt)
@@ -714,7 +721,7 @@ func (s *sqliteStore) Session(tokenHash string) (*Session, error) {
 	return &sess, nil
 }
 
-func (s *sqliteStore) DeleteSession(tokenHash string) error {
+func (s *DB) DeleteSession(tokenHash string) error {
 	_, err := s.db.Exec(`DELETE FROM sessions WHERE token_hash=?`, tokenHash)
 	if err != nil {
 		return fmt.Errorf("delete session: %w", err)
@@ -722,7 +729,7 @@ func (s *sqliteStore) DeleteSession(tokenHash string) error {
 	return nil
 }
 
-func (s *sqliteStore) DeleteExpiredSessions(now int64) (int64, error) {
+func (s *DB) DeleteExpiredSessions(now int64) (int64, error) {
 	res, err := s.db.Exec(`DELETE FROM sessions WHERE expires_at < ?`, now)
 	if err != nil {
 		return 0, fmt.Errorf("delete expired sessions: %w", err)
@@ -730,7 +737,7 @@ func (s *sqliteStore) DeleteExpiredSessions(now int64) (int64, error) {
 	return res.RowsAffected()
 }
 
-func (s *sqliteStore) CreateAPIToken(t *APIToken) error {
+func (s *DB) CreateAPIToken(t *APIToken) error {
 	res, err := s.db.Exec(`INSERT INTO api_tokens (name, token_hash, created_at, last_used_at) VALUES (?,?,?,0)`,
 		t.Name, t.TokenHash, t.CreatedAt)
 	if err != nil {
@@ -743,7 +750,7 @@ func (s *sqliteStore) CreateAPIToken(t *APIToken) error {
 	return nil
 }
 
-func (s *sqliteStore) APITokens() ([]APIToken, error) {
+func (s *DB) APITokens() ([]APIToken, error) {
 	rows, err := s.db.Query(`SELECT id, name, token_hash, created_at, last_used_at FROM api_tokens ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("query api tokens: %w", err)
@@ -760,7 +767,7 @@ func (s *sqliteStore) APITokens() ([]APIToken, error) {
 	return out, rows.Err()
 }
 
-func (s *sqliteStore) APITokenByHash(hash string) (*APIToken, error) {
+func (s *DB) APITokenByHash(hash string) (*APIToken, error) {
 	var t APIToken
 	err := s.db.QueryRow(`SELECT id, name, token_hash, created_at, last_used_at FROM api_tokens WHERE token_hash=?`,
 		hash).Scan(&t.ID, &t.Name, &t.TokenHash, &t.CreatedAt, &t.LastUsedAt)
@@ -773,7 +780,7 @@ func (s *sqliteStore) APITokenByHash(hash string) (*APIToken, error) {
 	return &t, nil
 }
 
-func (s *sqliteStore) DeleteAPIToken(id int64) error {
+func (s *DB) DeleteAPIToken(id int64) error {
 	res, err := s.db.Exec(`DELETE FROM api_tokens WHERE id=?`, id)
 	if err != nil {
 		return fmt.Errorf("delete api token: %w", err)
@@ -784,7 +791,7 @@ func (s *sqliteStore) DeleteAPIToken(id int64) error {
 	return nil
 }
 
-func (s *sqliteStore) TouchAPIToken(hash string, at int64) error {
+func (s *DB) TouchAPIToken(hash string, at int64) error {
 	_, err := s.db.Exec(`UPDATE api_tokens SET last_used_at=? WHERE token_hash=? AND last_used_at < ?-60`,
 		at, hash, at)
 	if err != nil {
@@ -793,7 +800,7 @@ func (s *sqliteStore) TouchAPIToken(hash string, at int64) error {
 	return nil
 }
 
-func (s *sqliteStore) AggregateResults(cutoff int64) (int64, error) {
+func (s *DB) AggregateResults(cutoff int64) (int64, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, fmt.Errorf("begin retention tx: %w", err)
@@ -824,7 +831,7 @@ func (s *sqliteStore) AggregateResults(cutoff int64) (int64, error) {
 	return n, nil
 }
 
-func (s *sqliteStore) DeleteSummaries(cutoff int64) (int64, error) {
+func (s *DB) DeleteSummaries(cutoff int64) (int64, error) {
 	res, err := s.db.Exec(`DELETE FROM hourly_summaries WHERE hour < ?`, cutoff)
 	if err != nil {
 		return 0, fmt.Errorf("delete old summaries: %w", err)

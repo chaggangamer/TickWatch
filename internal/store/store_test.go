@@ -9,14 +9,14 @@ import (
 	"time"
 )
 
-func testStore(t *testing.T) *sqliteStore {
+func testStore(t *testing.T) *DB {
 	t.Helper()
 	st, err := Open(filepath.Join(t.TempDir(), "test.db"), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return st.(*sqliteStore)
+	return st.(*DB)
 }
 
 func mustJSON(t *testing.T, v any) []byte {
@@ -107,7 +107,11 @@ func TestMonitorValidation(t *testing.T) {
 	}{
 		{"valid http", newHTTPMonitor(t, "ok", "https://example.com"), false},
 		{"empty name", func() *Monitor { m := newHTTPMonitor(t, "x", "https://example.com"); m.Name = ""; return m }(), true},
-		{"long name", func() *Monitor { m := newHTTPMonitor(t, "x", "https://example.com"); m.Name = string(make([]byte, 200)); return m }(), true},
+		{"long name", func() *Monitor {
+			m := newHTTPMonitor(t, "x", "https://example.com")
+			m.Name = string(make([]byte, 200))
+			return m
+		}(), true},
 		{"bad type", func() *Monitor { m := newHTTPMonitor(t, "x", "https://example.com"); m.Type = "gopher"; return m }(), true},
 		{"interval too low", func() *Monitor { m := newHTTPMonitor(t, "x", "https://example.com"); m.Interval = 10; return m }(), true},
 		{"interval ok", func() *Monitor { m := newHTTPMonitor(t, "x", "https://example.com"); m.Interval = 20; return m }(), false},

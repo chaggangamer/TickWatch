@@ -118,6 +118,7 @@ func (u UptimeStat) Percent() float64 {
 
 type Store interface {
 	Close() error
+	Ping() error
 
 	CreateMonitor(m *Monitor) error
 	UpdateMonitor(m *Monitor) error
