@@ -1,6 +1,11 @@
 {{define "content"}}
 <h1>Status</h1>
 <p class="muted">Live status of monitored services. This page refreshes every 60 seconds.</p>
+{{if .AnyDown}}
+<div class="banner banner-down">Some systems are down</div>
+{{else if .Monitors}}
+<div class="banner banner-ok">All systems operational</div>
+{{end}}
 <div class="status-list">
 {{range .Monitors}}
 <div class="card status-row">
@@ -8,6 +13,9 @@
   <div class="status-main">
     <strong>{{.Monitor.Name}}</strong>
     <span class="muted">{{if .Target}}{{.Target}}{{else}}heartbeat{{end}}</span>
+    <svg class="uptime-bars" width="362" height="16" viewBox="0 0 362 16" role="img" aria-label="90 day uptime history">
+      {{range .Days}}<rect x="{{.X}}" y="1" width="3" height="14" rx="1" class="{{.Class}}"/>{{end}}
+    </svg>
   </div>
   <div class="status-stats">
     <span>24h {{if .u24}}{{printf "%.2f" .u24}}%{{else}}-{{end}}</span>

@@ -401,6 +401,61 @@ func (s *DB) Series(monitorID int64, since int64, maxPoints int) ([]Point, error
 	return points, nil
 }
 
+func (s *DB) DailyUptime(monitorID int64, days int, now int64) ([]DayStat, error) {
+	todayStart := now - now%86400
+	perDay := map[int64]*DayStat{}
+	merge := func(rows *sql.Rows) error {
+		for rows.Next() {
+			var day, total, ok int64
+			if err := rows.Scan(&day, &total, &ok); err != nil {
+				return err
+			}
+			stat := perDay[day]
+			if stat == nil {
+				stat = &DayStat{Day: day}
+				perDay[day] = stat
+			}
+			stat.Total += total
+			stat.OK += ok
+		}
+		return rows.Err()
+	}
+	rows, err := s.db.Query(`SELECT (hour/86400)*86400, SUM(total), SUM(ok) FROM hourly_summaries
+		WHERE monitor_id=? AND hour>=? AND hour<? GROUP BY (hour/86400)*86400`,
+		monitorID, todayStart-int64(days)*86400, todayStart)
+	if err != nil {
+		return nil, fmt.Errorf("daily uptime summaries: %w", err)
+	}
+	if err := merge(rows); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	rows, err = s.db.Query(`SELECT (created_at/86400)*86400, COUNT(*), SUM(ok) FROM check_results
+		WHERE monitor_id=? AND created_at>=? GROUP BY (created_at/86400)*86400`,
+		monitorID, todayStart)
+	if err != nil {
+		return nil, fmt.Errorf("daily uptime raw: %w", err)
+	}
+	if err := merge(rows); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	out := make([]DayStat, 0, days)
+	for i := days - 1; i >= 0; i-- {
+		day := todayStart - int64(i)*86400
+		if stat, has := perDay[day]; has {
+			out = append(out, *stat)
+			continue
+		}
+		out = append(out, DayStat{Day: day})
+	}
+	return out, nil
+}
+
 func (s *DB) OpenIncident(monitorID int64, startedAt int64, reason string) (int64, error) {
 	res, err := s.db.Exec(`INSERT INTO incidents (monitor_id, started_at, reason) VALUES (?,?,?)`,
 		monitorID, startedAt, reason)

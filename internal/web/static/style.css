@@ -169,6 +169,10 @@ tr.row-down td:first-child { box-shadow: inset 3px 0 0 var(--fail); }
 .banner-down { background: var(--fail-soft); color: var(--fail); border-color: var(--fail); }
 .uptime-bars { display: block; margin-top: 4px; }
 .uptime-bars rect:hover { opacity: 0.75; }
+.uptime-bars .bar-ok { fill: var(--ok); }
+.uptime-bars .bar-warn { fill: var(--warn); }
+.uptime-bars .bar-fail { fill: var(--fail); }
+.uptime-bars .bar-none { fill: var(--paused); opacity: 0.4; }
 
 .spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; }
 .spark { vertical-align: middle; }

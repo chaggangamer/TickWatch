@@ -104,6 +104,19 @@ type Point struct {
 	MS   int64 `json:"ms"`
 }
 
+type DayStat struct {
+	Day   int64
+	Total int64
+	OK    int64
+}
+
+func (d DayStat) Percent() float64 {
+	if d.Total == 0 {
+		return -1
+	}
+	return float64(d.OK) / float64(d.Total) * 100
+}
+
 type UptimeStat struct {
 	Total int64
 	OK    int64
@@ -139,6 +152,7 @@ type Store interface {
 	Uptime(monitorID int64, since int64) (UptimeStat, error)
 	UptimeBatch(since int64) (map[int64]UptimeStat, error)
 	Series(monitorID int64, since int64, maxPoints int) ([]Point, error)
+	DailyUptime(monitorID int64, days int, now int64) ([]DayStat, error)
 
 	OpenIncident(monitorID int64, startedAt int64, reason string) (int64, error)
 	CloseIncidents(monitorID int64, endedAt int64) error

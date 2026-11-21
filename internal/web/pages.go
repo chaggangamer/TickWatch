@@ -288,7 +288,11 @@ func (s *server) statusPage(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Unix()
 	latest, _ := s.store.LatestResults()
 	rows := make([]map[string]any, 0, len(monitors))
+	anyDown := false
 	for _, m := range monitors {
+		if m.Enabled && m.Status == store.StatusDown {
+			anyDown = true
+		}
 		row := map[string]any{
 			"Monitor": m,
 			"Target":  m.Target(),
@@ -307,12 +311,36 @@ func (s *server) statusPage(w http.ResponseWriter, r *http.Request) {
 				row[win.name] = nil
 			}
 		}
+		row["Days"] = buildDayBars(s.store.DailyUptime(m.ID, 90, now))
 		rows = append(rows, row)
 	}
 	s.render(w, r, 200, "status", map[string]any{
 		"Meta":     pageMeta{Title: "Status"},
 		"Monitors": rows,
+		"AnyDown":  anyDown,
 	})
+}
+
+func buildDayBars(days []store.DayStat, err error) []map[string]any {
+	if err != nil || days == nil {
+		days = []store.DayStat{}
+	}
+	out := make([]map[string]any, 0, 90)
+	for i, d := range days {
+		bar := map[string]any{"X": i * 4}
+		switch {
+		case d.Total == 0:
+			bar["Class"] = "bar-none"
+		case d.Percent() >= 99:
+			bar["Class"] = "bar-ok"
+		case d.Percent() >= 95:
+			bar["Class"] = "bar-warn"
+		default:
+			bar["Class"] = "bar-fail"
+		}
+		out = append(out, bar)
+	}
+	return out
 }
 
 func (s *server) dashState(w http.ResponseWriter, r *http.Request) {
