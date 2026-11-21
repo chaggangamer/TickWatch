@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 type smtpConfig struct {

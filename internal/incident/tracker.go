@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 const (

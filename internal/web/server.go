@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/tickwatch/tickwatch/internal/alert"
-	"github.com/tickwatch/tickwatch/internal/incident"
-	"github.com/tickwatch/tickwatch/internal/scheduler"
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/alert"
+	"github.com/chaggangamer/tickwatch/internal/incident"
+	"github.com/chaggangamer/tickwatch/internal/scheduler"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 //go:embed templates/*.html

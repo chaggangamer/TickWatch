@@ -43,7 +43,7 @@ docs/screenshot-dashboard.png, docs/screenshot-detail.png and docs/screenshot-st
 From source:
 
 ```sh
-git clone https://github.com/tickwatch/tickwatch
+git clone https://github.com/chaggangamer/tickwatch
 cd tickwatch
 go build ./cmd/tickwatch
 ./tickwatch serve

@@ -15,14 +15,14 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/tickwatch/tickwatch/internal/alert"
-	"github.com/tickwatch/tickwatch/internal/api"
-	"github.com/tickwatch/tickwatch/internal/checker"
-	"github.com/tickwatch/tickwatch/internal/config"
-	"github.com/tickwatch/tickwatch/internal/incident"
-	"github.com/tickwatch/tickwatch/internal/scheduler"
-	"github.com/tickwatch/tickwatch/internal/store"
-	"github.com/tickwatch/tickwatch/internal/web"
+	"github.com/chaggangamer/tickwatch/internal/alert"
+	"github.com/chaggangamer/tickwatch/internal/api"
+	"github.com/chaggangamer/tickwatch/internal/checker"
+	"github.com/chaggangamer/tickwatch/internal/config"
+	"github.com/chaggangamer/tickwatch/internal/incident"
+	"github.com/chaggangamer/tickwatch/internal/scheduler"
+	"github.com/chaggangamer/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/web"
 )
 
 type combinedHandler struct {

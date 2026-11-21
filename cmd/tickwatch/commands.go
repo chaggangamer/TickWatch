@@ -11,8 +11,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/config"
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/config"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 func openStoreForCLI(cfgPath string) (store.Store, config.Config, error) {

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 func (r *localRunner) runTCP(ctx context.Context, m store.Monitor) Result {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 func loginSession(t *testing.T, h http.Handler, s *store.DB) (string, string) {

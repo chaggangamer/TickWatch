@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 func runCheck(t *testing.T, r Runner, m store.Monitor, timeout time.Duration) Result {

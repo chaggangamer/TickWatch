@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/alert"
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/alert"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 var validChannelTypes = map[string]bool{

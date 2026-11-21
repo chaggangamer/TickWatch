@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 func newDisp(t *testing.T, reminderEvery time.Duration) (*Dispatcher, *store.DB) {

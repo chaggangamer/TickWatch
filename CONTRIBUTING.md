@@ -9,7 +9,7 @@ You need Go 1.24 or newer (the go.mod file states the exact minimum). No other
 toolchain requirements: the project uses no CGO.
 
 ```sh
-git clone https://github.com/tickwatch/tickwatch
+git clone https://github.com/chaggangamer/tickwatch
 cd tickwatch
 go build ./cmd/tickwatch
 ./tickwatch serve

@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/alert"
-	"github.com/tickwatch/tickwatch/internal/checker"
-	"github.com/tickwatch/tickwatch/internal/incident"
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/alert"
+	"github.com/chaggangamer/tickwatch/internal/checker"
+	"github.com/chaggangamer/tickwatch/internal/incident"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 const dueLimit = 200

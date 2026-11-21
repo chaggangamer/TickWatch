@@ -1,4 +1,4 @@
-module github.com/tickwatch/tickwatch
+module github.com/chaggangamer/tickwatch
 
 go 1.26.0
 

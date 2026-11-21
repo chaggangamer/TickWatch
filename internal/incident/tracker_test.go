@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 func testTracker(t *testing.T) (*Tracker, store.Store, store.Monitor) {

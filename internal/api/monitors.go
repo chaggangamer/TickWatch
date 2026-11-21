@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 type monitorRequest struct {

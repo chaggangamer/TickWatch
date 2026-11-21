@@ -10,7 +10,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 FROM scratch
 LABEL org.opencontainers.image.title="Tickwatch"
 LABEL org.opencontainers.image.description="Self-hosted uptime and cron monitoring"
-LABEL org.opencontainers.image.source="https://github.com/tickwatch/tickwatch"
+LABEL org.opencontainers.image.source="https://github.com/chaggangamer/tickwatch"
 LABEL org.opencontainers.image.licenses="MIT"
 COPY --from=build /out/tickwatch /tickwatch
 COPY --from=build --chown=65532:65532 /out/data /data

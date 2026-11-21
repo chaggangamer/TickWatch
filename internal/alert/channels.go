@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
 func (d *Dispatcher) sendTelegram(ch store.Channel, msg Message) error {

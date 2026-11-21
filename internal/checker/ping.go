@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/tickwatch/tickwatch/internal/store"
+	"github.com/chaggangamer/tickwatch/internal/store"
 
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
