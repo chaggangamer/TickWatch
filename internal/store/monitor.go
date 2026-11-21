@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -188,29 +189,41 @@ func (m *Monitor) Target() string {
 	}
 }
 
+type ValidationError struct {
+	Field string
+	Msg   string
+}
+
+func (e *ValidationError) Error() string {
+	if e.Field == "" {
+		return e.Msg
+	}
+	return e.Field + ": " + e.Msg
+}
+
 func (m *Monitor) Validate() error {
 	if len(m.Name) < 1 || len(m.Name) > 120 {
-		return fmt.Errorf("name must be between 1 and 120 characters")
+		return &ValidationError{Field: "name", Msg: "must be between 1 and 120 characters"}
 	}
 	switch m.Type {
 	case TypeHTTP, TypeTCP, TypePing, TypeHeartbeat:
 	default:
-		return fmt.Errorf("unknown monitor type %q", m.Type)
+		return &ValidationError{Field: "type", Msg: "unknown monitor type"}
 	}
 	if m.Interval < 20 || m.Interval > 604800 {
-		return fmt.Errorf("interval_seconds must be between 20 and 604800")
+		return &ValidationError{Field: "interval", Msg: "must be between 20 and 604800 seconds"}
 	}
 	if m.Timeout < 1 || m.Timeout > 120 {
-		return fmt.Errorf("timeout_seconds must be between 1 and 120")
+		return &ValidationError{Field: "timeout", Msg: "must be between 1 and 120 seconds"}
 	}
 	if m.Retries < 0 || m.Retries > 5 {
-		return fmt.Errorf("retries must be between 0 and 5")
+		return &ValidationError{Field: "retries", Msg: "must be between 0 and 5"}
 	}
 	if m.FailureThreshold < 1 || m.FailureThreshold > 10 {
-		return fmt.Errorf("failure_threshold must be between 1 and 10")
+		return &ValidationError{Field: "failure_threshold", Msg: "must be between 1 and 10"}
 	}
 	if m.Cooldown < 0 || m.Cooldown > 86400 {
-		return fmt.Errorf("cooldown_seconds must be between 0 and 86400")
+		return &ValidationError{Field: "cooldown", Msg: "must be between 0 and 86400 seconds"}
 	}
 	switch m.Type {
 	case TypeHTTP:
@@ -228,45 +241,45 @@ func (m *Monitor) Validate() error {
 func validateHTTP(b []byte) error {
 	c, err := ParseHTTPConfig(b)
 	if err != nil {
-		return err
+		return &ValidationError{Field: "url", Msg: "invalid config"}
 	}
 	u, err := url.Parse(c.URL)
 	if err != nil {
-		return fmt.Errorf("invalid url: %w", err)
+		return &ValidationError{Field: "url", Msg: "invalid url"}
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("url scheme must be http or https")
+		return &ValidationError{Field: "url", Msg: "scheme must be http or https"}
 	}
 	if u.Host == "" {
-		return fmt.Errorf("url must include a host")
+		return &ValidationError{Field: "url", Msg: "must include a host"}
 	}
 	method := c.Method
 	if method == "" {
 		method = "GET"
 	}
 	if !validMethods[method] {
-		return fmt.Errorf("unsupported method %q", method)
+		return &ValidationError{Field: "method", Msg: "unsupported method"}
 	}
 	if _, err := ParseStatusRanges(c.ExpectStatus); err != nil {
-		return err
+		return &ValidationError{Field: "expect_status", Msg: "use codes or ranges like 200-299"}
 	}
 	if len(c.Body) > 64*1024 {
-		return fmt.Errorf("body must be at most 64 KiB")
+		return &ValidationError{Field: "body", Msg: "must be at most 64 KiB"}
 	}
 	if c.BodyMatch != "" && c.BodyRegex != "" {
-		return fmt.Errorf("body_match and body_regex are mutually exclusive")
+		return &ValidationError{Field: "body_regex", Msg: "body_match and body_regex are mutually exclusive"}
 	}
 	if c.BodyRegex != "" {
 		if _, err := regexp.Compile(c.BodyRegex); err != nil {
-			return fmt.Errorf("invalid body_regex: %w", err)
+			return &ValidationError{Field: "body_regex", Msg: "invalid pattern"}
 		}
 	}
 	for k, v := range c.Headers {
 		if !headerNamePattern.MatchString(k) {
-			return fmt.Errorf("invalid header name %q", k)
+			return &ValidationError{Field: "headers", Msg: fmt.Sprintf("invalid header name %q", k)}
 		}
 		if strings.ContainsAny(v, "\r\n") {
-			return fmt.Errorf("invalid header value for %q", k)
+			return &ValidationError{Field: "headers", Msg: fmt.Sprintf("invalid header value for %q", k)}
 		}
 	}
 	return nil
@@ -275,46 +288,53 @@ func validateHTTP(b []byte) error {
 func validateTCP(b []byte) error {
 	c, err := ParseTCPConfig(b)
 	if err != nil {
-		return err
+		return &ValidationError{Field: "tcp_host", Msg: "invalid config"}
 	}
-	return validateHostPort(c.Host, c.Port)
+	if err := validateHost(c.Host); err != nil {
+		return &ValidationError{Field: "tcp_host", Msg: vmsg(err)}
+	}
+	if c.Port < 1 || c.Port > 65535 {
+		return &ValidationError{Field: "tcp_port", Msg: "must be between 1 and 65535"}
+	}
+	return nil
 }
 
 func validatePing(b []byte) error {
 	c, err := ParsePingConfig(b)
 	if err != nil {
-		return err
+		return &ValidationError{Field: "ping_host", Msg: "invalid config"}
 	}
-	return validateHost(c.Host)
+	if err := validateHost(c.Host); err != nil {
+		return &ValidationError{Field: "ping_host", Msg: vmsg(err)}
+	}
+	return nil
 }
 
 func validateHeartbeat(b []byte) error {
 	c, err := ParseHeartbeatConfig(b)
 	if err != nil {
-		return err
+		return &ValidationError{Field: "period", Msg: "invalid config"}
 	}
 	if c.Period < 60 || c.Period > 604800 {
-		return fmt.Errorf("period must be between 60 and 604800 seconds")
+		return &ValidationError{Field: "period", Msg: "must be between 60 and 604800 seconds"}
 	}
 	if c.Grace < 0 || c.Grace > 86400 {
-		return fmt.Errorf("grace must be between 0 and 86400 seconds")
+		return &ValidationError{Field: "grace", Msg: "must be between 0 and 86400 seconds"}
 	}
 	return nil
 }
 
-func validateHostPort(host string, port int) error {
-	if err := validateHost(host); err != nil {
-		return err
+func vmsg(err error) string {
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		return ve.Msg
 	}
-	if port < 1 || port > 65535 {
-		return fmt.Errorf("port must be between 1 and 65535")
-	}
-	return nil
+	return err.Error()
 }
 
 func validateHost(host string) error {
 	if host == "" || len(host) > 253 {
-		return fmt.Errorf("host must be between 1 and 253 characters")
+		return &ValidationError{Msg: "host must be between 1 and 253 characters"}
 	}
 	if !hostPattern.MatchString(host) && !isIPv6Literal(host) {
 		return fmt.Errorf("invalid host %q", host)

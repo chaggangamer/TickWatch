@@ -21,7 +21,7 @@ func parseHeaders(lines string) (map[string]string, error) {
 		}
 		k, v, found := strings.Cut(line, ":")
 		if !found {
-			return nil, errors.New("headers must use 'Name: value' lines")
+			return nil, &store.ValidationError{Field: "headers", Msg: "use 'Name: value' lines"}
 		}
 		headers[strings.TrimSpace(k)] = strings.TrimSpace(v)
 	}
@@ -95,7 +95,7 @@ func configFromForm(r *http.Request, m *store.Monitor) error {
 	case store.TypeTCP:
 		port, err := strconv.Atoi(r.FormValue("tcp_port"))
 		if err != nil {
-			return errors.New("port must be a number")
+			return &store.ValidationError{Field: "tcp_port", Msg: "must be a number"}
 		}
 		raw, err := json.Marshal(store.TCPConfig{Host: r.FormValue("tcp_host"), Port: port})
 		if err != nil {
@@ -123,7 +123,7 @@ func configFromForm(r *http.Request, m *store.Monitor) error {
 
 func (s *server) monitorCreate(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		s.formError(w, r, nil, "Invalid form token, please retry.")
+		s.formError(w, r, nil, errors.New("invalid form token, please retry"))
 		return
 	}
 	m, err := s.buildMonitorFromForm(r, nil)
@@ -135,11 +135,11 @@ func (s *server) monitorCreate(w http.ResponseWriter, r *http.Request) {
 		err = m.Validate()
 	}
 	if err != nil {
-		s.formError(w, r, m, err.Error())
+		s.formError(w, r, m, err)
 		return
 	}
 	if err := s.store.CreateMonitor(m); err != nil {
-		s.formError(w, r, m, "Could not save monitor.")
+		s.formError(w, r, m, errors.New("could not save monitor"))
 		return
 	}
 	s.linkChannels(r, m.ID)
@@ -273,18 +273,47 @@ func (s *server) linkChannels(r *http.Request, monitorID int64) {
 	}
 }
 
-func (s *server) formError(w http.ResponseWriter, r *http.Request, m *store.Monitor, msg string) {
+func (s *server) formError(w http.ResponseWriter, r *http.Request, m *store.Monitor, err error) {
 	sess := sessionFrom(r.Context())
+	fieldErrs := map[string]string{}
+	msg := err.Error()
+	var ve *store.ValidationError
+	if errors.As(err, &ve) {
+		fieldErrs[ve.Field] = ve.Msg
+		msg = ve.Field + " " + ve.Msg
+	}
 	data := map[string]any{
-		"Meta":     pageMeta{CSRF: sess.csrf, Title: "Add monitor"},
-		"IsEdit":   false,
-		"Error":    msg,
-		"Channels": s.channelList(),
-		"Selected": map[int64]bool{},
-		"HTTP":     store.HTTPConfig{Method: "GET", ExpectStatus: "200-299"},
+		"Meta":        pageMeta{CSRF: sess.csrf, Title: "Add monitor"},
+		"IsEdit":      false,
+		"Error":       msg,
+		"FieldErrors": fieldErrs,
+		"Channels":    s.channelList(),
+		"Selected":    map[int64]bool{},
+		"HTTP":        store.HTTPConfig{Method: "GET", ExpectStatus: "200-299"},
 	}
 	if m != nil {
 		data["Monitor"] = m
+		if m.Type == store.TypeHTTP {
+			if hc, perr := store.ParseHTTPConfig(m.Config); perr == nil {
+				data["HTTP"] = hc
+				data["HeaderLines"] = headerLines(hc.Headers)
+			}
+		}
+		if m.Type == store.TypeTCP {
+			if tc, perr := store.ParseTCPConfig(m.Config); perr == nil {
+				data["TCP"] = tc
+			}
+		}
+		if m.Type == store.TypePing {
+			if pc, perr := store.ParsePingConfig(m.Config); perr == nil {
+				data["Ping"] = pc
+			}
+		}
+		if m.Type == store.TypeHeartbeat {
+			if hb, perr := store.ParseHeartbeatConfig(m.Config); perr == nil {
+				data["Heartbeat"] = hb
+			}
+		}
 	}
 	s.render(w, r, 400, "monitor_form", data)
 }
