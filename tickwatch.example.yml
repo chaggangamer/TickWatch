@@ -1,0 +1,39 @@
+# Tickwatch configuration example.
+# Copy to tickwatch.yml or point --config at it.
+# Every value can be overridden with environment variables (see README).
+
+server:
+  # Address the HTTP server listens on.
+  listen: ":8080"
+  # Public URL of this instance. Used in heartbeat ping URLs and alert messages.
+  # Leave empty if you do not use those features.
+  base_url: "http://localhost:8080"
+
+database:
+  # SQLite file. Its directory must exist and be writable by the tickwatch user.
+  path: "tickwatch.db"
+
+log:
+  # One of: debug, info, warn, error
+  level: "info"
+
+scheduler:
+  # Number of concurrent check workers.
+  workers: 16
+
+retention:
+  # Raw check results older than this are aggregated into hourly summaries.
+  raw_days: 30
+  # Hourly summaries older than this are deleted.
+  summary_days: 365
+
+ssrf:
+  # When true, monitors may not target loopback, private, link-local or CGNAT
+  # addresses. Enable this if untrusted people can create monitors.
+  block_private: false
+
+admin:
+  # Initial dashboard user, created on first start when the users table is empty.
+  username: "admin"
+  # If empty, Tickwatch generates a password and logs it once at startup.
+  password: ""
