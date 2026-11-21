@@ -264,3 +264,156 @@ func TestDashSeriesEndpoint(t *testing.T) {
 		t.Errorf("bad id = %d, want 400", rec.Code)
 	}
 }
+
+func browserForm(csrf string, overrides map[string]string) url.Values {
+	form := url.Values{
+		"_csrf":             {csrf},
+		"enabled_sent":      {"1"},
+		"channels_sent":     {"1"},
+		"name":              {"browser-form"},
+		"type":              {"http"},
+		"interval":          {"60"},
+		"timeout":           {"10"},
+		"retries":           {"0"},
+		"failure_threshold": {"3"},
+		"cooldown":          {"300"},
+		"url":               {""},
+		"method":            {"GET"},
+		"expect_status":     {"200-299"},
+		"headers":           {""},
+		"body":              {""},
+		"body_match":        {""},
+		"body_regex":        {""},
+		"follow_redirects":  {"on"},
+		"tcp_host":          {""},
+		"tcp_port":          {""},
+		"ping_host":         {""},
+		"period":            {""},
+		"grace":             {""},
+		"enabled":           {"on"},
+	}
+	for k, v := range overrides {
+		form.Set(k, v)
+	}
+	return form
+}
+
+func TestBrowserFormCreatesHTTPMonitor(t *testing.T) {
+	h, s := newWeb(t)
+	session, csrf := loginSession(t, h, s)
+
+	form := browserForm(csrf, map[string]string{
+		"name": "web-check",
+		"url": "https://example.com/health",
+	})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, authedRequest(session, "/monitors", form))
+	if rec.Code != 303 && rec.Code != 302 {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	monitors, _ := s.Monitors()
+	if len(monitors) != 1 {
+		t.Fatalf("monitors = %d, want 1", len(monitors))
+	}
+	m := monitors[0]
+	if m.Type != store.TypeHTTP {
+		t.Errorf("type = %q, want http", m.Type)
+	}
+	if !m.Enabled {
+		t.Error("monitor should be enabled by default")
+	}
+	cfg, err := store.ParseHTTPConfig(m.Config)
+	if err != nil || cfg.URL != "https://example.com/health" || cfg.Method != "GET" || cfg.ExpectStatus != "200-299" {
+		t.Errorf("config = %s, err %v", m.Config, err)
+	}
+	if !cfg.Redirects() {
+		t.Error("follow redirects should be on")
+	}
+}
+
+func TestBrowserFormCreatesTCPMonitor(t *testing.T) {
+	h, s := newWeb(t)
+	session, csrf := loginSession(t, h, s)
+
+	form := browserForm(csrf, map[string]string{
+		"name": "db-port",
+		"type": "tcp",
+		"tcp_host": "db.internal",
+		"tcp_port": "5432",
+	})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, authedRequest(session, "/monitors", form))
+	if rec.Code != 303 && rec.Code != 302 {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	monitors, _ := s.Monitors()
+	if len(monitors) != 1 {
+		t.Fatalf("monitors = %d, want 1", len(monitors))
+	}
+	m := monitors[0]
+	if m.Type != store.TypeTCP || !m.Enabled {
+		t.Errorf("type = %q enabled = %v", m.Type, m.Enabled)
+	}
+	cfg, err := store.ParseTCPConfig(m.Config)
+	if err != nil || cfg.Host != "db.internal" || cfg.Port != 5432 {
+		t.Errorf("config = %s, err %v", m.Config, err)
+	}
+}
+
+func TestBrowserFormCreatesHeartbeatMonitor(t *testing.T) {
+	h, s := newWeb(t)
+	session, csrf := loginSession(t, h, s)
+
+	form := browserForm(csrf, map[string]string{
+		"name": "nightly-job",
+		"type": "heartbeat",
+		"period": "3600",
+		"grace": "300",
+	})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, authedRequest(session, "/monitors", form))
+	if rec.Code != 303 && rec.Code != 302 {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	monitors, _ := s.Monitors()
+	if len(monitors) != 1 {
+		t.Fatalf("monitors = %d, want 1", len(monitors))
+	}
+	m := monitors[0]
+	if m.Type != store.TypeHeartbeat || !m.Enabled {
+		t.Errorf("type = %q enabled = %v", m.Type, m.Enabled)
+	}
+	if m.HeartbeatToken == "" {
+		t.Error("heartbeat token missing")
+	}
+	if m.NextDeadlineAt == 0 {
+		t.Error("deadline not initialized")
+	}
+	cfg, err := store.ParseHeartbeatConfig(m.Config)
+	if err != nil || cfg.Period != 3600 || cfg.Grace != 300 {
+		t.Errorf("config = %s, err %v", m.Config, err)
+	}
+}
+
+func TestBrowserFormWithoutTypeIsRejected(t *testing.T) {
+	h, s := newWeb(t)
+	session, csrf := loginSession(t, h, s)
+
+	form := browserForm(csrf, map[string]string{"type": ""})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, authedRequest(session, "/monitors", form))
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "unknown monitor type") {
+		t.Errorf("body missing field error: %s", body)
+	}
+	if !strings.Contains(body, `name="url"`) {
+		t.Error("form page truncated before the url field")
+	}
+	monitors, _ := s.Monitors()
+	if len(monitors) != 0 {
+		t.Errorf("monitors created = %d, want 0", len(monitors))
+	}
+}
