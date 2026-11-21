@@ -181,9 +181,10 @@ func bootstrapAdmin(st store.Store, cfg config.Config, log *slog.Logger) error {
 		return fmt.Errorf("hash password: %w", err)
 	}
 	user := &store.User{
-		Username:     cfg.Admin.Username,
-		PasswordHash: string(hash),
-		CreatedAt:    time.Now().Unix(),
+		Username:          cfg.Admin.Username,
+		PasswordHash:      string(hash),
+		PasswordGenerated: generated,
+		CreatedAt:         time.Now().Unix(),
 	}
 	if err := st.CreateUser(user); err != nil {
 		return fmt.Errorf("create admin user: %w", err)

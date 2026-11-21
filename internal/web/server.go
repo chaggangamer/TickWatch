@@ -91,6 +91,8 @@ func New(d Deps) (http.Handler, error) {
 		priv.Post("/channels/{id}/update", s.channelUpdate)
 		priv.Post("/channels/{id}/delete", s.channelDelete)
 		priv.Post("/channels/{id}/test", s.channelTest)
+		priv.Get("/password", s.passwordPage)
+		priv.Post("/password", s.passwordSubmit)
 		priv.Get("/dash/state", s.dashState)
 		priv.Get("/dash/monitors/{id}/series", s.dashSeries)
 	})

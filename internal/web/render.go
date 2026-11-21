@@ -79,7 +79,7 @@ func (s *server) parseTemplates() error {
 
 	names := []string{
 		"login", "monitors", "monitor_form", "monitor_detail",
-		"channels", "status",
+		"channels", "status", "password", "error",
 	}
 	s.tpl = map[string]*template.Template{}
 	for _, name := range names {

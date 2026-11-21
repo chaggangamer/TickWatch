@@ -64,6 +64,10 @@ func (s *server) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess := sessionFrom(r.Context())
+	passwordNotice := false
+	if user, err := s.store.UserByID(sess.userID); err == nil {
+		passwordNotice = user.PasswordGenerated
+	}
 	rows := make([]monitorRow, 0, len(monitors))
 	latest, _ := s.store.LatestResults()
 	uptime, _ := s.store.UptimeBatch(time.Now().Unix() - 86400)
@@ -85,8 +89,9 @@ func (s *server) dashboard(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 	s.render(w, r, 200, "monitors", map[string]any{
-		"Meta":     pageMeta{CSRF: sess.csrf, Title: "Monitors"},
-		"Monitors": rows,
+		"Meta":           pageMeta{CSRF: sess.csrf, Title: "Monitors"},
+		"Monitors":       rows,
+		"PasswordNotice": passwordNotice,
 	})
 }
 
@@ -404,4 +409,60 @@ func (s *server) dashSeries(w http.ResponseWriter, r *http.Request) {
 func writeJSONOK(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (s *server) passwordPage(w http.ResponseWriter, r *http.Request) {
+	sess := sessionFrom(r.Context())
+	user, err := s.store.UserByID(sess.userID)
+	mustChange := err == nil && user.PasswordGenerated
+	s.render(w, r, 200, "password", map[string]any{
+		"Meta":       pageMeta{CSRF: sess.csrf, Title: "Change password"},
+		"Changed":    r.URL.Query().Get("changed") == "1",
+		"MustChange": mustChange,
+		"Error":      "",
+	})
+}
+
+func (s *server) passwordSubmit(w http.ResponseWriter, r *http.Request) {
+	sess := sessionFrom(r.Context())
+	renderErr := func(msg string) {
+		s.render(w, r, 400, "password", map[string]any{
+			"Meta":  pageMeta{CSRF: sess.csrf, Title: "Change password"},
+			"Error": msg,
+		})
+	}
+	if !s.csrfCheck(r) {
+		renderErr("Invalid form token, please retry.")
+		return
+	}
+	user, err := s.store.UserByID(sess.userID)
+	if err != nil {
+		renderErr("Could not load your account.")
+		return
+	}
+	current := r.FormValue("current_password")
+	next := r.FormValue("new_password")
+	confirm := r.FormValue("confirm_password")
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(current)) != nil {
+		renderErr("Current password is incorrect.")
+		return
+	}
+	if len(next) < 8 {
+		renderErr("New password must be at least 8 characters.")
+		return
+	}
+	if next != confirm {
+		renderErr("Passwords do not match.")
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(next), bcrypt.DefaultCost)
+	if err != nil {
+		renderErr("Could not hash the new password.")
+		return
+	}
+	if err := s.store.UpdateUserPassword(user.ID, string(hash)); err != nil {
+		renderErr("Could not save the new password.")
+		return
+	}
+	http.Redirect(w, r, "/password?changed=1", http.StatusSeeOther)
 }

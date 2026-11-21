@@ -78,10 +78,11 @@ type Channel struct {
 }
 
 type User struct {
-	ID           int64
-	Username     string
-	PasswordHash string
-	CreatedAt    int64
+	ID                int64
+	Username          string
+	PasswordHash      string
+	PasswordGenerated bool
+	CreatedAt         int64
 }
 
 type Session struct {
@@ -180,6 +181,8 @@ type Store interface {
 	UserCount() (int, error)
 	CreateUser(u *User) error
 	UserByName(name string) (*User, error)
+	UserByID(id int64) (*User, error)
+	UpdateUserPassword(id int64, hash string) error
 
 	CreateSession(s *Session) error
 	Session(tokenHash string) (*Session, error)

@@ -729,8 +729,8 @@ func (s *DB) UserCount() (int, error) {
 }
 
 func (s *DB) CreateUser(u *User) error {
-	res, err := s.db.Exec(`INSERT INTO users (username, password_hash, created_at) VALUES (?,?,?)`,
-		u.Username, u.PasswordHash, u.CreatedAt)
+	res, err := s.db.Exec(`INSERT INTO users (username, password_hash, password_generated, created_at) VALUES (?,?,?,?)`,
+		u.Username, u.PasswordHash, u.PasswordGenerated, u.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert user: %w", err)
 	}
@@ -741,17 +741,46 @@ func (s *DB) CreateUser(u *User) error {
 	return nil
 }
 
-func (s *DB) UserByName(name string) (*User, error) {
+const userCols = `id, username, password_hash, password_generated, created_at`
+
+func scanUser(scan func(dest ...any) error) (User, error) {
 	var u User
-	err := s.db.QueryRow(`SELECT id, username, password_hash, created_at FROM users WHERE username=?`,
-		name).Scan(&u.ID, &u.Username, &u.PasswordHash, &u.CreatedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
+	err := scan(&u.ID, &u.Username, &u.PasswordHash, &u.PasswordGenerated, &u.CreatedAt)
+	return u, err
+}
+
+func (s *DB) UserByName(name string) (*User, error) {
+	u, err := scanUser(s.db.QueryRow(`SELECT `+userCols+` FROM users WHERE username=?`, name).Scan)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 	return &u, nil
+}
+
+func (s *DB) UserByID(id int64) (*User, error) {
+	u, err := scanUser(s.db.QueryRow(`SELECT `+userCols+` FROM users WHERE id=?`, id).Scan)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("get user by id: %w", err)
+	}
+	return &u, nil
+}
+
+func (s *DB) UpdateUserPassword(id int64, hash string) error {
+	res, err := s.db.Exec(`UPDATE users SET password_hash=?, password_generated=0 WHERE id=?`,
+		hash, id)
+	if err != nil {
+		return fmt.Errorf("update user password: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *DB) CreateSession(sess *Session) error {
