@@ -103,6 +103,8 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 		m.Path = r.URL.Path
 		m.Version = s.version
 		data["Meta"] = m
+	} else {
+		data["Meta"] = pageMeta{Path: r.URL.Path, Version: s.version}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)

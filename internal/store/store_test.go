@@ -609,3 +609,76 @@ func TestRetention(t *testing.T) {
 		t.Errorf("delete summaries at now = %d err %v", m2, err)
 	}
 }
+
+func TestDailyUptime(t *testing.T) {
+	s := testStore(t)
+	m := newHTTPMonitor(t, "example", "https://example.com")
+	if err := s.CreateMonitor(m); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	todayStart := now - now%86400
+
+	for i := 0; i < 2; i++ {
+		if err := s.RecordResult(&CheckResult{MonitorID: m.ID, OK: true, CreatedAt: now - int64(i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.RecordResult(&CheckResult{MonitorID: m.ID, OK: false, CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	tenDaysAgo := todayStart - 10*86400 + 3600
+	if _, err := s.db.Exec(`INSERT INTO hourly_summaries (monitor_id, hour, total, ok, latency_sum) VALUES (?,?,?,?,?)`,
+		m.ID, tenDaysAgo, 10, 9, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	days, err := s.DailyUptime(m.ID, 90, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(days) != 90 {
+		t.Fatalf("days = %d, want 90", len(days))
+	}
+	today := days[89]
+	if today.Day != todayStart {
+		t.Errorf("today bucket = %d, want %d", today.Day, todayStart)
+	}
+	if today.Total != 3 || today.OK != 2 {
+		t.Errorf("today = %d/%d, want 2/3 ok", today.OK, today.Total)
+	}
+	if days[79].Total != 10 || days[79].OK != 9 {
+		t.Errorf("ten days ago = %d/%d, want 9/10 ok", days[79].OK, days[79].Total)
+	}
+	if days[50].Total != 0 {
+		t.Errorf("empty day total = %d, want 0", days[50].Total)
+	}
+}
+
+func TestUserPasswordFlag(t *testing.T) {
+	s := testStore(t)
+	u := &User{Username: "admin", PasswordHash: "hash", PasswordGenerated: true, CreatedAt: time.Now().Unix()}
+	if err := s.CreateUser(u); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := s.UserByID(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.PasswordGenerated {
+		t.Error("bootstrap flag should persist")
+	}
+	if err := s.UpdateUserPassword(u.ID, "newhash"); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := s.UserByID(u.ID)
+	if again.PasswordGenerated {
+		t.Error("flag should clear after password change")
+	}
+	if again.PasswordHash != "newhash" {
+		t.Error("hash not updated")
+	}
+	if err := s.UpdateUserPassword(999, "x"); err != ErrNotFound {
+		t.Errorf("missing user update err = %v", err)
+	}
+}

@@ -1,4 +1,5 @@
 {{define "content"}}
+{{if .PasswordNotice}}<div class="alert alert-info">This instance still uses the generated bootstrap password. <a href="/password">Change it now</a> to secure your dashboard.</div>{{end}}
 {{if not .Monitors}}
 <div class="card empty-state">
   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h4l3-7 4 14 3-7h6"/></svg>
@@ -11,7 +12,6 @@
   <h1>Monitors</h1>
   <a class="btn btn-primary" href="/monitors/new">Add monitor</a>
 </div>
-{{if .PasswordNotice}}<div class="alert alert-info">This instance still uses the generated bootstrap password. <a href="/password">Change it now</a> to secure your dashboard.</div>{{end}}
 <div class="table-wrap">
 <table class="table" id="monitor-table">
   <thead>

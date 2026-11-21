@@ -46,7 +46,7 @@
     <legend>Telegram</legend>
     <div class="grid">
       <label>Bot token</label><input name="bot_token" type="password" placeholder="leave blank to keep current">
-      <label>Chat ID</label><input name="chat_id" value="{{with .Cfg}}{{.chat_id}}{{end}}">
+      <label>Chat ID</label><input name="chat_id" value="{{with index .Cfg "chat_id"}}{{.}}{{end}}">
     </div>
   </fieldset>
   <fieldset class="type-fieldset" data-type="slack">
@@ -64,18 +64,18 @@
   <fieldset class="type-fieldset" data-type="smtp">
     <legend>Email</legend>
     <div class="grid">
-      <label>Host</label><input name="host" value="{{with .Cfg}}{{.host}}{{end}}">
-      <label>Port</label><input name="port" type="number" value="{{with .Cfg}}{{.port}}{{else}}587{{end}}">
-      <label>Username</label><input name="username" value="{{with .Cfg}}{{.username}}{{end}}">
+      <label>Host</label><input name="host" value="{{with index .Cfg "host"}}{{.}}{{end}}">
+      <label>Port</label><input name="port" type="number" value="{{with index .Cfg "port"}}{{.}}{{else}}587{{end}}">
+      <label>Username</label><input name="username" value="{{with index .Cfg "username"}}{{.}}{{end}}">
       <label>Password</label><input name="password" type="password" placeholder="leave blank to keep current">
-      <label>From</label><input name="from" value="{{with .Cfg}}{{.from}}{{end}}" placeholder="tickwatch@example.com">
-      <label>To (comma separated)</label><input name="to" value="{{with .Cfg}}{{.to_join}}{{end}}">
+      <label>From</label><input name="from" value="{{with index .Cfg "from"}}{{.}}{{end}}" placeholder="tickwatch@example.com">
+      <label>To (comma separated)</label><input name="to" value="{{with index .Cfg "to_join"}}{{.}}{{end}}">
     </div>
   </fieldset>
   <fieldset class="type-fieldset" data-type="webhook">
     <legend>Webhook</legend>
     <div class="grid">
-      <label>URL</label><input name="url" value="{{with .Cfg}}{{.url}}{{end}}">
+      <label>URL</label><input name="url" value="{{with index .Cfg "url"}}{{.}}{{end}}">
       <label>Secret header</label><input name="secret" type="password" placeholder="leave blank to keep current">
     </div>
   </fieldset>
