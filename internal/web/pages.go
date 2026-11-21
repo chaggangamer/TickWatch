@@ -111,13 +111,29 @@ func (s *server) monitorDetail(w http.ResponseWriter, r *http.Request) {
 	channels, _ := s.store.MonitorChannels(m.ID)
 	sess := sessionFrom(r.Context())
 
+	now := time.Now().Unix()
+	stat24, _ := s.store.Uptime(m.ID, now-86400)
+	stat7, _ := s.store.Uptime(m.ID, now-7*86400)
+	stat30, _ := s.store.Uptime(m.ID, now-30*86400)
+	var avgMS int64
+	var counted int64
+	for _, res := range results {
+		if res.OK && res.LatencyMS > 0 {
+			avgMS += res.LatencyMS
+			counted++
+		}
+	}
+	if counted > 0 {
+		avgMS /= counted
+	}
+
 	var pingURL string
 	if m.Type == store.TypeHeartbeat && m.HeartbeatToken != "" {
 		pingURL = "/ping/" + m.HeartbeatToken
 	}
 	var sslDays int64
 	if m.SSLExpiresAt > 0 {
-		sslDays = (m.SSLExpiresAt - time.Now().Unix()) / 86400
+		sslDays = (m.SSLExpiresAt - now) / 86400
 	}
 	s.render(w, r, 200, "monitor_detail", map[string]any{
 		"Meta":      pageMeta{CSRF: sess.csrf, Title: m.Name},
@@ -129,7 +145,18 @@ func (s *server) monitorDetail(w http.ResponseWriter, r *http.Request) {
 		"Series":    series,
 		"Channels":  channels,
 		"SSLDays":   sslDays,
+		"Uptime24":  percentOrZero(stat24),
+		"Uptime7":   percentOrZero(stat7),
+		"Uptime30":  percentOrZero(stat30),
+		"AvgMS":     avgMS,
 	})
+}
+
+func percentOrZero(stat store.UptimeStat) float64 {
+	if stat.Total == 0 {
+		return 0
+	}
+	return stat.Percent()
 }
 
 func (s *server) monitorForm(w http.ResponseWriter, r *http.Request) {

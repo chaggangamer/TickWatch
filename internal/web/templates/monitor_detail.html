@@ -5,9 +5,9 @@
     {{$csrf := .Meta.CSRF}}
     <form method="post" action="/monitors/{{.Monitor.ID}}/{{if .Monitor.Enabled}}pause{{else}}resume{{end}}" class="inline-form">
       <input type="hidden" name="_csrf" value="{{$csrf}}">
-      <button class="btn btn-sm">{{if .Monitor.Enabled}}Pause{{else}}Resume{{end}}</button>
+      <button class="btn btn-sm btn-secondary">{{if .Monitor.Enabled}}Pause{{else}}Resume{{end}}</button>
     </form>
-    <a class="btn btn-sm" href="/monitors/{{.Monitor.ID}}/edit">Edit</a>
+    <a class="btn btn-sm btn-secondary" href="/monitors/{{.Monitor.ID}}/edit">Edit</a>
     <form method="post" action="/monitors/{{.Monitor.ID}}/delete" class="inline-form confirm-delete">
       <input type="hidden" name="_csrf" value="{{$csrf}}">
       <button class="btn btn-sm btn-danger">Delete</button>
@@ -27,6 +27,35 @@
 {{if gt .SSLDays 0}}
 <div class="card">SSL certificate expires in {{.SSLDays}} days ({{fmtTime .Monitor.SSLExpiresAt}})</div>
 {{end}}
+<div class="summary-grid">
+  <div class="summary-card">
+    <div class="label">Status</div>
+    <div class="value {{if not .Monitor.Enabled}}muted{{else if eq .Monitor.Status "up"}}ok{{else if eq .Monitor.Status "down"}}fail{{end}}">{{if not .Monitor.Enabled}}paused{{else}}{{.Monitor.Status}}{{end}}</div>
+    <div class="sub">checks every {{.Monitor.Interval}}s</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Uptime 24h</div>
+    <div class="value">{{printf "%.2f" .Uptime24}}%</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Uptime 7d</div>
+    <div class="value">{{printf "%.2f" .Uptime7}}%</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Uptime 30d</div>
+    <div class="value">{{printf "%.2f" .Uptime30}}%</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Avg response</div>
+    <div class="value">{{if .AvgMS}}{{.AvgMS}} ms{{else}}-{{end}}</div>
+    <div class="sub">last {{len .Results}} checks</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Last check</div>
+    <div class="value">{{ago .Monitor.LastCheckAt}}</div>
+    <div class="sub">{{fmtTime .Monitor.LastCheckAt}}</div>
+  </div>
+</div>
 <div class="card">
   <h2>Response time (24h)</h2>
   <div id="chart" data-monitor="{{.Monitor.ID}}"></div>
