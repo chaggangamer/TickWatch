@@ -1,33 +1,48 @@
 {{define "content"}}
+{{if not .Monitors}}
+<div class="card empty-state">
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h4l3-7 4 14 3-7h6"/></svg>
+  <h2>No monitors yet</h2>
+  <p>Add your first monitor to start tracking uptime and cron jobs.</p>
+  <a class="btn btn-primary" href="/monitors/new">Add monitor</a>
+</div>
+{{else}}
 <div class="page-head">
   <h1>Monitors</h1>
   <a class="btn btn-primary" href="/monitors/new">Add monitor</a>
 </div>
+{{if .PasswordNotice}}<div class="alert alert-info">This instance still uses the generated bootstrap password. <a href="/password">Change it now</a> to secure your dashboard.</div>{{end}}
 <div class="table-wrap">
 <table class="table" id="monitor-table">
   <thead>
-    <tr><th>Status</th><th>Name</th><th>Type</th><th>Target</th><th>Response</th><th>Uptime 24h</th><th>Last check</th><th></th></tr>
+    <tr><th>Status</th><th>Name</th><th>Uptime 24h</th><th>Response</th><th>Latency</th><th>Last check</th><th></th></tr>
   </thead>
   <tbody>
   {{$csrf := .Meta.CSRF}}
   {{range .Monitors}}
-  <tr data-monitor-id="{{.ID}}">
-    <td><span class="dot dot-{{if not .Enabled}}paused{{else}}{{.Status}}{{end}}" title="{{if not .Enabled}}paused{{else}}{{.Status}}{{end}}"></span></td>
-    <td><a href="/monitors/{{.ID}}">{{.Name}}</a></td>
-    <td>{{.Type}}</td>
-    <td class="mono target">{{if .Target}}{{.Target}}{{else if eq .Type "heartbeat"}}heartbeat{{end}}</td>
-    <td><span class="latency">{{if .LatencyMS}}{{.LatencyMS}} ms{{else}}-{{end}}</span></td>
+  <tr data-monitor-id="{{.ID}}" {{if and .Enabled (eq .Status "down")}}class="row-down"{{end}}>
+    <td>
+      <span class="dot-row">
+        <span class="dot dot-{{if not .Enabled}}paused{{else}}{{.Status}}{{end}}"></span>
+        <span class="cell-sub">{{if not .Enabled}}paused{{else}}{{.Status}}{{end}}</span>
+      </span>
+    </td>
+    <td>
+      <div class="cell-main">
+        <a href="/monitors/{{.ID}}">{{.Name}}</a>
+        <span class="cell-sub">{{.Type}}{{if .Target}} - {{.Target}}{{end}}</span>
+      </div>
+    </td>
     <td class="uptime">{{if .HasUptime}}{{printf "%.2f" .Uptime24}}%{{else}}-{{end}}</td>
+    <td>{{spark .Spark}}</td>
+    <td><span class="latency">{{if .LatencyMS}}{{.LatencyMS}} ms{{else}}-{{end}}</span></td>
     <td class="last-check">{{ago .LastCheckAt}}</td>
     <td class="actions">
-      {{spark .Spark}}
       <form method="post" action="/monitors/{{.ID}}/{{if .Enabled}}pause{{else}}resume{{end}}" class="inline-form">
-        <div>
         <input type="hidden" name="_csrf" value="{{$csrf}}">
-        <button class="btn btn-sm">{{if .Enabled}}Pause{{else}}Resume{{end}}</button>
-        </div>
+        <button class="btn btn-sm btn-secondary">{{if .Enabled}}Pause{{else}}Resume{{end}}</button>
       </form>
-      <a class="btn btn-sm" href="/monitors/{{.ID}}/edit">Edit</a>
+      <a class="btn btn-sm btn-secondary" href="/monitors/{{.ID}}/edit">Edit</a>
       <form method="post" action="/monitors/{{.ID}}/delete" class="inline-form confirm-delete">
         <input type="hidden" name="_csrf" value="{{$csrf}}">
         <button class="btn btn-sm btn-danger">Delete</button>
@@ -35,8 +50,8 @@
     </td>
   </tr>
   {{end}}
-  {{if not .Monitors}}<tr><td colspan="8" class="muted">No monitors yet. Add one to start checking.</td></tr>{{end}}
   </tbody>
 </table>
 </div>
+{{end}}
 {{end}}
