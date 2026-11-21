@@ -26,14 +26,16 @@ type Deps struct {
 }
 
 type Scheduler struct {
-	store   store.Store
-	runner  checker.Runner
-	tracker *incident.Tracker
-	alerts  *alert.Dispatcher
-	log     *slog.Logger
-	workers int
-	jobs    chan store.Monitor
-	wg      sync.WaitGroup
+	store      store.Store
+	runner     checker.Runner
+	tracker    *incident.Tracker
+	alerts     *alert.Dispatcher
+	log        *slog.Logger
+	workers    int
+	jobs       chan store.Monitor
+	wg         sync.WaitGroup
+	sweepEvery time.Duration
+	sslEvery   time.Duration
 }
 
 func New(d Deps) *Scheduler {
@@ -44,13 +46,15 @@ func New(d Deps) *Scheduler {
 		d.Workers = 4
 	}
 	return &Scheduler{
-		store:   d.Store,
-		runner:  d.Runner,
-		tracker: d.Tracker,
-		alerts:  d.Alerts,
-		log:     d.Log,
-		workers: d.Workers,
-		jobs:    make(chan store.Monitor, 1024),
+		store:      d.Store,
+		runner:     d.Runner,
+		tracker:    d.Tracker,
+		alerts:     d.Alerts,
+		log:        d.Log,
+		workers:    d.Workers,
+		jobs:       make(chan store.Monitor, 1024),
+		sweepEvery: 5 * time.Second,
+		sslEvery:   6 * time.Hour,
 	}
 }
 
@@ -143,7 +147,7 @@ func (s *Scheduler) runCheck(m store.Monitor) {
 	if checkCtx.Err() != nil {
 		res = checker.Result{OK: false, Error: "request timed out"}
 	}
-	m.LastCheckAt = now
+	m.LastCheckAt = time.Now().Unix()
 	if res.SSLExpiresAt > 0 {
 		m.SSLExpiresAt = res.SSLExpiresAt
 	}
@@ -179,7 +183,7 @@ func (s *Scheduler) notifyEvent(ev *incident.Event) {
 
 func (s *Scheduler) checkBudget(m store.Monitor) time.Duration {
 	base := time.Duration(m.Timeout+2) * time.Second
-	overhead := time.Duration(m.Retries) * (time.Duration(m.Timeout) * time.Second + time.Second)
+	overhead := time.Duration(m.Retries) * (time.Duration(m.Timeout)*time.Second + time.Second)
 	return base + overhead
 }
 
@@ -193,7 +197,7 @@ func jitterSeconds(interval int) int {
 
 func (s *Scheduler) heartbeatLoop(ctx context.Context) {
 	defer s.wg.Done()
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(s.sweepEvery)
 	defer ticker.Stop()
 	for {
 		select {
