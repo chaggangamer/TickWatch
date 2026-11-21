@@ -167,33 +167,24 @@ func bootstrapAdmin(st store.Store, cfg config.Config, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("count users: %w", err)
 	}
-	if n > 0 {
+	if n > 0 || cfg.Admin.Password == "" {
 		return nil
 	}
-	password := cfg.Admin.Password
-	generated := false
-	if password == "" {
-		password = store.NewToken(8)
-		generated = true
+	if len(cfg.Admin.Password) < 8 {
+		return fmt.Errorf("TICKWATCH_ADMIN_PASSWORD must be at least 8 characters")
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.Admin.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
 	user := &store.User{
-		Username:          cfg.Admin.Username,
-		PasswordHash:      string(hash),
-		PasswordGenerated: generated,
-		CreatedAt:         time.Now().Unix(),
+		Username:     cfg.Admin.Username,
+		PasswordHash: string(hash),
+		CreatedAt:    time.Now().Unix(),
 	}
 	if err := st.CreateUser(user); err != nil {
 		return fmt.Errorf("create admin user: %w", err)
 	}
-	if generated {
-		log.Warn("no admin user existed; created one with a generated password, change it after first login",
-			"username", cfg.Admin.Username, "password", password)
-	} else {
-		log.Info("created admin user", "username", cfg.Admin.Username)
-	}
+	log.Info("created admin user from configuration", "username", cfg.Admin.Username)
 	return nil
 }

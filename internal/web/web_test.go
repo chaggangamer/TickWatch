@@ -181,6 +181,7 @@ func TestMonitorCreateFlow(t *testing.T) {
 
 func TestStatusPageShowsPublicOnly(t *testing.T) {
 	h, s := newWeb(t)
+	createBootstrapUser(t, s)
 
 	pub := &store.Monitor{
 		Type: store.TypeHTTP, Name: "public-one",
@@ -220,11 +221,20 @@ func TestStatusPageShowsPublicOnly(t *testing.T) {
 }
 
 func TestDashStateRequiresSession(t *testing.T) {
-	h, _ := newWeb(t)
+	h, s := newWeb(t)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/dash/state", nil))
+	if rec.Code != 303 && rec.Code != 302 {
+		t.Errorf("dash state without any user = %d, want redirect to setup", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/setup" {
+		t.Errorf("redirect = %q, want /setup", loc)
+	}
+	createBootstrapUser(t, s)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/dash/state", nil))
 	if rec.Code != 401 {
-		t.Errorf("dash state without session = %d, want 401", rec.Code)
+		t.Errorf("dash state with user but no session = %d, want 401", rec.Code)
 	}
 }
 

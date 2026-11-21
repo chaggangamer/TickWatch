@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="login-wrap">
+  <div class="card login-card">
+    <h1>Tickwatch</h1>
+    <p class="subtitle">Create the first admin account. This page is only available until setup is complete.</p>
+    {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
+    <form method="post" action="/setup">
+      <input type="hidden" name="setup_token" value="{{.SetupToken}}">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username" required maxlength="120" value="{{.Username}}">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8">
+      <div class="field-hint">at least 8 characters</div>
+      <label for="confirm_password">Confirm password</label>
+      <input id="confirm_password" name="confirm_password" type="password" autocomplete="new-password" required minlength="8">
+      <button type="submit" class="btn btn-primary btn-block">Create admin account</button>
+    </form>
+  </div>
+</div>
+{{end}}

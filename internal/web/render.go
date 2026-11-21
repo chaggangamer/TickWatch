@@ -78,7 +78,7 @@ func (s *server) parseTemplates() error {
 	}
 
 	names := []string{
-		"login", "monitors", "monitor_form", "monitor_detail",
+		"login", "setup", "monitors", "monitor_form", "monitor_detail",
 		"channels", "status", "password", "error",
 	}
 	s.tpl = map[string]*template.Template{}

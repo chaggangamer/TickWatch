@@ -74,9 +74,14 @@ docker compose up -d
 Compose stores data in the named volume `tickwatch-data` (mounted at `/data` in the
 container). Inspect it with `docker volume inspect tickwatch-data`.
 
-Open http://localhost:8080. On first start Tickwatch creates an admin user and, if
-TICKWATCH_ADMIN_PASSWORD is not set, logs the generated password once at startup.
-Change it after logging in.
+Open http://localhost:8080 and complete the setup page to create the admin account.
+Until the first admin exists, every dashboard request is redirected to the setup page
+and it disappears as soon as one is created. For automated deployments, set
+`TICKWATCH_ADMIN_PASSWORD` (minimum 8 characters) and Tickwatch creates the admin at
+boot instead.
+
+**Security note:** complete setup before exposing the instance to the internet. While
+no admin exists, anyone who can reach the instance can claim the administrator account.
 
 ## Configuration
 

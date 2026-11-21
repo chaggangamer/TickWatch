@@ -64,10 +64,6 @@ func (s *server) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess := sessionFrom(r.Context())
-	passwordNotice := false
-	if user, err := s.store.UserByID(sess.userID); err == nil {
-		passwordNotice = user.PasswordGenerated
-	}
 	rows := make([]monitorRow, 0, len(monitors))
 	latest, _ := s.store.LatestResults()
 	uptime, _ := s.store.UptimeBatch(time.Now().Unix() - 86400)
@@ -89,9 +85,8 @@ func (s *server) dashboard(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 	s.render(w, r, 200, "monitors", map[string]any{
-		"Meta":           pageMeta{CSRF: sess.csrf, Title: "Monitors"},
-		"Monitors":       rows,
-		"PasswordNotice": passwordNotice,
+		"Meta":     pageMeta{CSRF: sess.csrf, Title: "Monitors"},
+		"Monitors": rows,
 	})
 }
 
@@ -426,15 +421,11 @@ func (s *server) errorPage(w http.ResponseWriter, r *http.Request, status int, t
 		"Message": msg,
 	})
 }
-
 func (s *server) passwordPage(w http.ResponseWriter, r *http.Request) {
 	sess := sessionFrom(r.Context())
-	user, err := s.store.UserByID(sess.userID)
-	mustChange := err == nil && user.PasswordGenerated
 	s.render(w, r, 200, "password", map[string]any{
 		"Meta":        pageMeta{CSRF: sess.csrf, Title: "Change password"},
 		"Changed":     r.URL.Query().Get("changed") == "1",
-		"MustChange":  mustChange,
 		"Error":       "",
 		"FieldErrors": map[string]string{},
 	})
@@ -482,4 +473,80 @@ func (s *server) passwordSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/password?changed=1", http.StatusSeeOther)
+}
+
+func (s *server) setupPage(w http.ResponseWriter, r *http.Request) {
+	token := store.NewToken(16)
+	http.SetCookie(w, &http.Cookie{
+		Name:     setupCookie,
+		Value:    token,
+		Path:     "/setup",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   600,
+	})
+	s.render(w, r, 200, "setup", map[string]any{
+		"Meta":       pageMeta{Title: "Set up Tickwatch"},
+		"SetupToken": token,
+		"Error":      "",
+		"Username":   "",
+	})
+}
+
+func (s *server) setupSubmit(w http.ResponseWriter, r *http.Request) {
+	if s.usersExist() {
+		s.errorPage(w, r, http.StatusNotFound, "Page not found", "This instance has already been set up.")
+		return
+	}
+	fail := func(msg string) {
+		token := store.NewToken(16)
+		http.SetCookie(w, &http.Cookie{
+			Name: setupCookie, Value: token, Path: "/setup", HttpOnly: true,
+			SameSite: http.SameSiteStrictMode, MaxAge: 600,
+		})
+		s.render(w, r, 400, "setup", map[string]any{
+			"Meta": pageMeta{Title: "Set up Tickwatch"}, "SetupToken": token,
+			"Error": msg, "Username": r.FormValue("username"),
+		})
+	}
+	cookie, err := r.Cookie(setupCookie)
+	provided := r.FormValue("setup_token")
+	if err != nil || cookie.Value == "" || !constantTimeEqual(provided, cookie.Value) {
+		fail("Invalid or expired form token, please try again.")
+		return
+	}
+	username := strings.TrimSpace(r.FormValue("username"))
+	password := r.FormValue("password")
+	confirm := r.FormValue("confirm_password")
+	if username == "" || len(username) > 120 || strings.Contains(username, " ") {
+		fail("Username must be 1 to 120 characters without spaces.")
+		return
+	}
+	if len(password) < 8 {
+		fail("Password must be at least 8 characters.")
+		return
+	}
+	if password != confirm {
+		fail("Passwords do not match.")
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		fail("Could not create the account.")
+		return
+	}
+	user := &store.User{Username: username, PasswordHash: string(hash), CreatedAt: time.Now().Unix()}
+	if err := s.store.CreateUser(user); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			s.errorPage(w, r, http.StatusNotFound, "Already set up", "An administrator already exists for this instance.")
+			return
+		}
+		fail("Could not create the account.")
+		return
+	}
+	if err := s.createSession(w, user.ID); err != nil {
+		fail("Could not sign you in.")
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

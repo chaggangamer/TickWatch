@@ -729,8 +729,8 @@ func (s *DB) UserCount() (int, error) {
 }
 
 func (s *DB) CreateUser(u *User) error {
-	res, err := s.db.Exec(`INSERT INTO users (username, password_hash, password_generated, created_at) VALUES (?,?,?,?)`,
-		u.Username, u.PasswordHash, u.PasswordGenerated, u.CreatedAt)
+	res, err := s.db.Exec(`INSERT INTO users (username, password_hash, created_at) VALUES (?,?,?)`,
+		u.Username, u.PasswordHash, u.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert user: %w", err)
 	}
@@ -741,11 +741,11 @@ func (s *DB) CreateUser(u *User) error {
 	return nil
 }
 
-const userCols = `id, username, password_hash, password_generated, created_at`
+const userCols = `id, username, password_hash, created_at`
 
 func scanUser(scan func(dest ...any) error) (User, error) {
 	var u User
-	err := scan(&u.ID, &u.Username, &u.PasswordHash, &u.PasswordGenerated, &u.CreatedAt)
+	err := scan(&u.ID, &u.Username, &u.PasswordHash, &u.CreatedAt)
 	return u, err
 }
 
@@ -772,7 +772,7 @@ func (s *DB) UserByID(id int64) (*User, error) {
 }
 
 func (s *DB) UpdateUserPassword(id int64, hash string) error {
-	res, err := s.db.Exec(`UPDATE users SET password_hash=?, password_generated=0 WHERE id=?`,
+	res, err := s.db.Exec(`UPDATE users SET password_hash=? WHERE id=?`,
 		hash, id)
 	if err != nil {
 		return fmt.Errorf("update user password: %w", err)

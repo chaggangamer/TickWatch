@@ -26,6 +26,7 @@ var templateFS embed.FS
 var staticFS embed.FS
 
 const sessionCookie = "tickwatch_session"
+const setupCookie = "tickwatch_setup"
 const sessionTTL = 7 * 24 * time.Hour
 
 type Deps struct {
@@ -70,8 +71,11 @@ func New(d Deps) (http.Handler, error) {
 
 	mux := chi.NewRouter()
 	mux.Use(s.recoverer)
+	mux.Use(s.setupGuard)
 	mux.NotFound(s.notFound)
 	mux.Handle("/static/*", staticHandler())
+	mux.Get("/setup", s.setupPage)
+	mux.Post("/setup", s.setupSubmit)
 	mux.Get("/login", s.loginPage)
 	mux.Post("/login", s.loginSubmit)
 	mux.Get("/status", s.statusPage)
@@ -99,6 +103,37 @@ func New(d Deps) (http.Handler, error) {
 		priv.Get("/dash/monitors/{id}/series", s.dashSeries)
 	})
 	return mux, nil
+}
+
+func (s *server) usersExist() bool {
+	n, err := s.store.UserCount()
+	return err == nil && n > 0
+}
+
+func (s *server) setupGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		if p == "/setup" {
+			if s.usersExist() {
+				s.errorPage(w, r, http.StatusNotFound, "Page not found",
+					"This instance has already been set up.")
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+		if strings.HasPrefix(p, "/static/") || p == "/healthz" ||
+			p == "/ping" || strings.HasPrefix(p, "/ping/") ||
+			strings.HasPrefix(p, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !s.usersExist() {
+			http.Redirect(w, r, "/setup", http.StatusSeeOther)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *server) recoverer(next http.Handler) http.Handler {

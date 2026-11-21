@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,7 +44,7 @@ func createBootstrapUser(t *testing.T, s *store.DB) (string, string) {
 	t.Helper()
 	hash, _ := bcrypt.GenerateFromPassword([]byte("bootstrap-pw"), bcrypt.MinCost)
 	if err := s.CreateUser(&store.User{
-		Username: "admin", PasswordHash: string(hash), PasswordGenerated: true,
+		Username: "admin", PasswordHash: string(hash),
 		CreatedAt: time.Now().Unix(),
 	}); err != nil {
 		t.Fatal(err)
@@ -78,7 +80,8 @@ func loginAs(t *testing.T, h http.Handler, s *store.DB, username, password strin
 }
 
 func TestLoginRenders(t *testing.T) {
-	h, _ := newWebServer(t)
+	h, s := newWebServer(t)
+	createBootstrapUser(t, s)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/login", nil))
 	if rec.Code != 200 {
@@ -98,14 +101,6 @@ func TestChangePasswordFlow(t *testing.T) {
 	session, csrf := loginAs(t, h, s, username, password)
 
 	rec := httptest.NewRecorder()
-	get := httptest.NewRequest("GET", "/", nil)
-	get.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
-	h.ServeHTTP(rec, get)
-	if !strings.Contains(rec.Body.String(), "bootstrap password") {
-		t.Error("first run notice missing on dashboard")
-	}
-
-	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, authedGet(session, "/password"))
 	if rec.Code != 200 {
 		t.Fatalf("password page = %d", rec.Code)
@@ -153,9 +148,6 @@ func TestChangePasswordFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user.PasswordGenerated {
-		t.Error("bootstrap flag should be cleared")
-	}
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("new-password-1")) != nil {
 		t.Error("new hash not stored")
 	}
@@ -163,18 +155,11 @@ func TestChangePasswordFlow(t *testing.T) {
 	if _, newCsrf := loginAs(t, h, s, username, "new-password-1"); newCsrf == "" {
 		t.Error("login with new password failed")
 	}
-
-	rec = httptest.NewRecorder()
-	get2 := httptest.NewRequest("GET", "/", nil)
-	get2.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
-	h.ServeHTTP(rec, get2)
-	if strings.Contains(rec.Body.String(), "bootstrap password") {
-		t.Error("notice should disappear after password change")
-	}
 }
 
 func TestNotFoundPage(t *testing.T) {
-	h, _ := newWebServer(t)
+	h, s := newWebServer(t)
+	createBootstrapUser(t, s)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/definitely-not-here", nil))
 	if rec.Code != 404 {
@@ -189,10 +174,185 @@ func TestNotFoundPage(t *testing.T) {
 }
 
 func TestVersionInFooter(t *testing.T) {
-	h, _ := newWebServer(t)
+	h, s := newWebServer(t)
+	createBootstrapUser(t, s)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/login", nil))
 	if !strings.Contains(rec.Body.String(), "Tickwatch test") {
 		t.Errorf("version missing from footer: %s", rec.Body.String())
+	}
+}
+
+func setupTokens(t *testing.T, h http.Handler) (string, string) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/setup", nil))
+	if rec.Code != 200 {
+		t.Fatalf("setup page = %d", rec.Code)
+	}
+	var cookie string
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == setupCookie {
+			cookie = c.Value
+		}
+	}
+	token := ""
+	if m := regexp.MustCompile(`name="setup_token" value="([a-f0-9]+)"`).FindStringSubmatch(rec.Body.String()); m != nil {
+		token = m[1]
+	}
+	if cookie == "" || token == "" {
+		t.Fatal("setup token or cookie missing")
+	}
+	return cookie, token
+}
+
+func submitSetup(t *testing.T, h http.Handler, cookie, token, username, password, confirm string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/setup", strings.NewReader(url.Values{
+		"setup_token":      {token},
+		"username":         {username},
+		"password":         {password},
+		"confirm_password": {confirm},
+	}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: setupCookie, Value: cookie})
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestSetupRendersWhenNoUser(t *testing.T) {
+	h, _ := newWebServer(t)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/setup", nil))
+	if rec.Code != 200 {
+		t.Fatalf("setup page = %d", rec.Code)
+	}
+	for _, want := range []string{"Create the first admin account", `name="username"`, `name="password"`, `name="confirm_password"`, `name="setup_token"`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("setup page missing %q", want)
+		}
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	if rec.Code != 303 && rec.Code != 302 {
+		t.Errorf("dashboard without user = %d, want redirect", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/setup" {
+		t.Errorf("redirect target = %q, want /setup", loc)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/login", nil))
+	if rec.Code != 303 && rec.Code != 302 {
+		t.Errorf("login without user = %d, want redirect to setup", rec.Code)
+	}
+}
+
+func TestSetupCreatesUserAndLogsIn(t *testing.T) {
+	h, s := newWebServer(t)
+	cookie, token := setupTokens(t, h)
+
+	rec := submitSetup(t, h, cookie, token, "admin", "setup-password-1", "setup-password-1")
+	if rec.Code != 303 && rec.Code != 302 {
+		t.Fatalf("setup status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	var session string
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == sessionCookie {
+			session = c.Value
+		}
+	}
+	if session == "" {
+		t.Fatal("no session cookie after setup")
+	}
+	user, err := s.UserByName("admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("setup-password-1")) != nil {
+		t.Error("stored hash does not match password")
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/setup", nil))
+	if rec.Code != 404 {
+		t.Errorf("setup after first user = %d, want 404", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	get := httptest.NewRequest("GET", "/", nil)
+	get.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+	h.ServeHTTP(rec, get)
+	if rec.Code != 200 {
+		t.Errorf("dashboard after setup login = %d, want 200", rec.Code)
+	}
+}
+
+func TestSetupRejectsBadInput(t *testing.T) {
+	h, _ := newWebServer(t)
+	cookie, token := setupTokens(t, h)
+
+	cases := []struct {
+		name                  string
+		username, pw, confirm string
+		want                  string
+	}{
+		{"short password", "admin", "short", "short", "at least 8 characters"},
+		{"mismatch", "admin", "long-enough-1", "different-1", "Passwords do not match"},
+		{"bad token", "admin", "long-enough-1", "long-enough-1", "Invalid or expired form token"},
+		{"space in username", "two words", "long-enough-1", "long-enough-1", "without spaces"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			token := token
+			if tc.name == "bad token" {
+				token = "wrong-token"
+			}
+			rec := submitSetup(t, h, cookie, token, tc.username, tc.pw, tc.confirm)
+			if rec.Code != 400 {
+				t.Fatalf("status = %d, want 400", rec.Code)
+			}
+			if !strings.Contains(rec.Body.String(), tc.want) {
+				t.Errorf("body missing %q: %s", tc.want, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestSetupConcurrentCreatesOneUser(t *testing.T) {
+	h, s := newWebServer(t)
+
+	const n = 8
+	var wg sync.WaitGroup
+	codes := make([]int, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			cookie, token := setupTokens(t, h)
+			rec := submitSetup(t, h, cookie, token, "admin", "setup-password-1", "setup-password-1")
+			codes[i] = rec.Code
+		}(i)
+	}
+	wg.Wait()
+
+	count, err := s.UserCount()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("users = %d, want 1 after %d concurrent setups", count, n)
+	}
+	successes := 0
+	for _, c := range codes {
+		if c == 303 || c == 302 {
+			successes++
+		}
+	}
+	if successes != 1 {
+		t.Errorf("successful setups = %d, want 1 (codes %v)", successes, codes)
 	}
 }

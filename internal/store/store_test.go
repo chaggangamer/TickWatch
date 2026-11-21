@@ -655,9 +655,9 @@ func TestDailyUptime(t *testing.T) {
 	}
 }
 
-func TestUserPasswordFlag(t *testing.T) {
+func TestUserPasswordUpdate(t *testing.T) {
 	s := testStore(t)
-	u := &User{Username: "admin", PasswordHash: "hash", PasswordGenerated: true, CreatedAt: time.Now().Unix()}
+	u := &User{Username: "admin", PasswordHash: "hash", CreatedAt: time.Now().Unix()}
 	if err := s.CreateUser(u); err != nil {
 		t.Fatal(err)
 	}
@@ -665,16 +665,13 @@ func TestUserPasswordFlag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !loaded.PasswordGenerated {
-		t.Error("bootstrap flag should persist")
+	if loaded.PasswordHash != "hash" {
+		t.Error("hash not persisted")
 	}
 	if err := s.UpdateUserPassword(u.ID, "newhash"); err != nil {
 		t.Fatal(err)
 	}
 	again, _ := s.UserByID(u.ID)
-	if again.PasswordGenerated {
-		t.Error("flag should clear after password change")
-	}
 	if again.PasswordHash != "newhash" {
 		t.Error("hash not updated")
 	}
