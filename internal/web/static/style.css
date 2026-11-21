@@ -98,30 +98,43 @@ input[type="checkbox"] { width: auto; padding: 0; accent-color: var(--accent); }
 input[type="checkbox"]:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
 textarea { resize: vertical; min-height: 64px; }
 select { appearance: auto; }
-select[multiple] {
-  height: auto; min-height: 120px; padding: 8px; background: var(--surface);
-}
-select[multiple] option {
-  padding: 8px 10px; border-radius: 4px; background: var(--surface); color: var(--text);
-}
-select[multiple] option:checked {
-  background: var(--accent); color: var(--accent-text);
-}
 
-.table-wrap, select[multiple], textarea {
+.check-list {
+  display: grid; gap: 6px;
+}
+.check-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+  font-size: 14px; color: var(--text); cursor: pointer;
+}
+.check-row:hover { border-color: var(--accent); }
+.check-row input[type="checkbox"] { margin: 0; }
+
+details.advanced {
+  border: 1px solid var(--border); border-radius: 8px; margin: 16px 0;
+  background: var(--surface); padding: 8px 16px 16px;
+}
+details.advanced summary {
+  cursor: pointer; font-weight: 600; padding: 8px 0; user-select: none;
+  color: var(--text);
+}
+details.advanced summary:hover { color: var(--accent); }
+details.advanced[open] summary { color: var(--muted); font-weight: 500; }
+
+.table-wrap, textarea {
   scrollbar-width: thin;
   scrollbar-color: var(--muted) var(--surface);
 }
-.table-wrap::-webkit-scrollbar, select[multiple]::-webkit-scrollbar, textarea::-webkit-scrollbar {
+.table-wrap::-webkit-scrollbar, textarea::-webkit-scrollbar {
   width: 10px; height: 10px;
 }
-.table-wrap::-webkit-scrollbar-track, select[multiple]::-webkit-scrollbar-track, textarea::-webkit-scrollbar-track {
+.table-wrap::-webkit-scrollbar-track, textarea::-webkit-scrollbar-track {
   background: var(--surface);
 }
-.table-wrap::-webkit-scrollbar-thumb, select[multiple]::-webkit-scrollbar-thumb, textarea::-webkit-scrollbar-thumb {
+.table-wrap::-webkit-scrollbar-thumb, textarea::-webkit-scrollbar-thumb {
   background: var(--muted); border-radius: 5px; border: 2px solid var(--surface);
 }
-.table-wrap::-webkit-scrollbar-thumb:hover, select[multiple]::-webkit-scrollbar-thumb:hover, textarea::-webkit-scrollbar-thumb:hover {
+.table-wrap::-webkit-scrollbar-thumb:hover, textarea::-webkit-scrollbar-thumb:hover {
   background: var(--accent);
 }
 
