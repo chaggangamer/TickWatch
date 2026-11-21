@@ -123,22 +123,23 @@ func configFromForm(r *http.Request, m *store.Monitor) error {
 
 func (s *server) monitorCreate(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		s.formError(w, r, "monitors_new", nil, "Invalid form token, please retry.")
+		s.formError(w, r, nil, "Invalid form token, please retry.")
 		return
 	}
 	m, err := s.buildMonitorFromForm(r, nil)
 	if err == nil {
-		if err := configFromForm(r, m); err == nil {
-			store.Normalize(m)
-			err = m.Validate()
-		}
+		err = configFromForm(r, m)
+	}
+	if err == nil {
+		store.Normalize(m)
+		err = m.Validate()
 	}
 	if err != nil {
-		s.formError(w, r, "monitors_new", m, err.Error())
+		s.formError(w, r, m, err.Error())
 		return
 	}
 	if err := s.store.CreateMonitor(m); err != nil {
-		s.formError(w, r, "monitors_new", m, "Could not save monitor.")
+		s.formError(w, r, m, "Could not save monitor.")
 		return
 	}
 	s.linkChannels(r, m.ID)
@@ -147,7 +148,7 @@ func (s *server) monitorCreate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) monitorUpdate(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", 403)
+		http.Error(w, "invalid form token", http.StatusForbidden)
 		return
 	}
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -166,13 +167,14 @@ func (s *server) monitorUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	m, err := s.buildMonitorFromForm(r, existing)
 	if err == nil {
-		if err := configFromForm(r, m); err == nil {
-			store.Normalize(m)
-			err = m.Validate()
-		}
+		err = configFromForm(r, m)
+	}
+	if err == nil {
+		store.Normalize(m)
+		err = m.Validate()
 	}
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if m.Type == store.TypeHeartbeat {
@@ -189,7 +191,7 @@ func (s *server) monitorUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) monitorDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", 403)
+		http.Error(w, "invalid form token", http.StatusForbidden)
 		return
 	}
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -207,7 +209,7 @@ func (s *server) monitorDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) monitorPause(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", 403)
+		http.Error(w, "invalid form token", http.StatusForbidden)
 		return
 	}
 	s.setPaused(w, r, false)
@@ -215,7 +217,7 @@ func (s *server) monitorPause(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) monitorResume(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", 403)
+		http.Error(w, "invalid form token", http.StatusForbidden)
 		return
 	}
 	s.setPaused(w, r, true)
@@ -271,7 +273,7 @@ func (s *server) linkChannels(r *http.Request, monitorID int64) {
 	}
 }
 
-func (s *server) formError(w http.ResponseWriter, r *http.Request, tpl string, m *store.Monitor, msg string) {
+func (s *server) formError(w http.ResponseWriter, r *http.Request, m *store.Monitor, msg string) {
 	sess := sessionFrom(r.Context())
 	data := map[string]any{
 		"Meta":     pageMeta{CSRF: sess.csrf, Title: "Add monitor"},
@@ -403,7 +405,7 @@ func channelSecretKeys(chType string) []string {
 
 func (s *server) channelSave(w http.ResponseWriter, r *http.Request, id int64) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", 403)
+		http.Error(w, "invalid form token", http.StatusForbidden)
 		return
 	}
 	chType := r.FormValue("type")
@@ -475,7 +477,7 @@ func (s *server) channelUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) channelDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		http.Error(w, "invalid form token", 403)
+		http.Error(w, "invalid form token", http.StatusForbidden)
 		return
 	}
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -492,7 +494,7 @@ func (s *server) channelDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) channelTest(w http.ResponseWriter, r *http.Request) {
 	if !s.csrfCheck(r) {
-		writeWErr(w, 403, "csrf", "invalid csrf token")
+		writeWErr(w, http.StatusForbidden, "csrf", "invalid csrf token")
 		return
 	}
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)

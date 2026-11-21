@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"html/template"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -73,7 +74,7 @@ func New(d Deps) (http.Handler, error) {
 	mux.Group(func(priv chi.Router) {
 		priv.Use(s.requireSession)
 		priv.Get("/", s.dashboard)
-		priv.Get("/logout", s.logout)
+		priv.Post("/logout", s.logout)
 		priv.Get("/monitors/new", s.monitorForm)
 		priv.Get("/monitors/{id}", s.monitorDetail)
 		priv.Get("/monitors/{id}/edit", s.monitorForm)
@@ -94,8 +95,11 @@ func New(d Deps) (http.Handler, error) {
 }
 
 func staticHandler() http.HandlerFunc {
-	fs := http.FS(staticFS)
-	fileServer := http.StripPrefix("/static/", http.FileServer(fs))
+	sub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		panic("static embed missing: " + err.Error())
+	}
+	fileServer := http.StripPrefix("/static/", http.FileServer(http.FS(sub)))
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		fileServer.ServeHTTP(w, r)

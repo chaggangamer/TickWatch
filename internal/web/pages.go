@@ -215,8 +215,8 @@ func (s *server) channelList() []store.Channel {
 func (s *server) channelsPage(w http.ResponseWriter, r *http.Request) {
 	sess := sessionFrom(r.Context())
 	data := map[string]any{
-		"Meta":     pageMeta{CSRF: sess.csrf, Title: "Alert channels"},
-		"Channels": s.channelsListForPage(),
+		"Meta":        pageMeta{CSRF: sess.csrf, Title: "Alert channels"},
+		"Channels":    s.channelsListForPage(),
 		"EditChannel": nil,
 	}
 	if editID := r.URL.Query().Get("edit"); editID != "" {

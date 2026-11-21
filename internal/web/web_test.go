@@ -153,14 +153,14 @@ func TestMonitorCreateFlow(t *testing.T) {
 	csrf = sess.CSRFToken
 
 	form := url.Values{
-		"_csrf":     {csrf},
-		"type":      {"http"},
-		"name":      {"example"},
-		"interval":  {"60"},
-		"timeout":   {"10"},
-		"url":       {"https://example.com"},
-		"method":    {"GET"},
-		"enabled":   {"on"},
+		"_csrf":    {csrf},
+		"type":     {"http"},
+		"name":     {"example"},
+		"interval": {"60"},
+		"timeout":  {"10"},
+		"url":      {"https://example.com"},
+		"method":   {"GET"},
+		"enabled":  {"on"},
 	}
 	req = httptest.NewRequest("POST", "/monitors", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -184,7 +184,7 @@ func TestStatusPageShowsPublicOnly(t *testing.T) {
 
 	pub := &store.Monitor{
 		Type: store.TypeHTTP, Name: "public-one",
-		Config: []byte(`{"url":"https://example.com"}`),
+		Config:   []byte(`{"url":"https://example.com"}`),
 		Interval: 60, Timeout: 10, FailureThreshold: 3, Cooldown: 300,
 		Enabled: true, IsPublic: true, Status: store.StatusUp,
 		CreatedAt: time.Now().Unix(), UpdatedAt: time.Now().Unix(), NextRunAt: time.Now().Unix(),
@@ -192,7 +192,7 @@ func TestStatusPageShowsPublicOnly(t *testing.T) {
 	store.Normalize(pub)
 	priv := &store.Monitor{
 		Type: store.TypeHTTP, Name: "private-one",
-		Config: []byte(`{"url":"https://example.com"}`),
+		Config:   []byte(`{"url":"https://example.com"}`),
 		Interval: 60, Timeout: 10, FailureThreshold: 3, Cooldown: 300,
 		Enabled: true, IsPublic: false, Status: store.StatusUp,
 		CreatedAt: time.Now().Unix(), UpdatedAt: time.Now().Unix(), NextRunAt: time.Now().Unix(),
@@ -225,5 +225,21 @@ func TestDashStateRequiresSession(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/dash/state", nil))
 	if rec.Code != 401 {
 		t.Errorf("dash state without session = %d, want 401", rec.Code)
+	}
+}
+
+func TestStaticAssets(t *testing.T) {
+	h, _ := newWeb(t)
+	for _, path := range []string{"/static/style.css", "/static/app.js", "/static/chart.js"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+		if rec.Code != 200 {
+			t.Errorf("%s = %d, want 200", path, rec.Code)
+		}
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/static/style.css", nil))
+	if ct := rec.Header().Get("Cache-Control"); ct == "" {
+		t.Error("static assets missing cache header")
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"sort"
 	"time"
 )
 
@@ -129,13 +128,4 @@ func sparkSVG(vals []int64) template.HTML {
 	}
 	svg := fmt.Sprintf(`<svg class="spark" width="%.0f" height="%.0f" viewBox="0 0 %.0f %.0f"><polyline points="%s"/></svg>`, w, h, w, h, pts)
 	return template.HTML(svg)
-}
-
-func sortedKeys(m map[string]float64) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
