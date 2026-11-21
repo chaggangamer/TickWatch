@@ -1,0 +1,13 @@
+.git
+.github
+dist
+data
+*.db
+*.db-shm
+*.db-wal
+tickwatch.yml
+tickwatch
+tickwatch.exe
+bin
+Dockerfile
+docker-compose.yml
