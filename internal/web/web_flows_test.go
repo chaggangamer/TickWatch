@@ -522,4 +522,3 @@ func TestAdvancedOpenOnValidationError(t *testing.T) {
 		t.Error("advanced section should be closed by default")
 	}
 }
-
