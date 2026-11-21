@@ -5,7 +5,7 @@ building, testing and submitting changes.
 
 ## Development setup
 
-You need Go 1.24 or newer (the go.mod file states the exact minimum). No other
+You need Go 1.26 or newer (the go.mod file states the exact minimum). No other
 toolchain requirements: the project uses no CGO.
 
 ```sh

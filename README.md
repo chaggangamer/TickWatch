@@ -1,5 +1,9 @@
 # Tickwatch
 
+[![CI](https://github.com/chaggangamer/tickwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/chaggangamer/tickwatch/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&logoColor=white)](https://go.dev)
+
 Self-hosted uptime and cron monitoring in a single Go binary. Tickwatch checks websites,
 APIs, TCP ports and cron jobs on a schedule, records every check, opens incidents when
 things break, and sends alerts to Telegram, Slack, Discord, email or a generic webhook.
@@ -7,6 +11,9 @@ things break, and sends alerts to Telegram, Slack, Discord, email or a generic w
 Free and open source under the MIT license. The architecture keeps clean seams for a
 future hosted edition (multi-user, teams, multi-region checks) without building paid
 features now.
+
+Building from source requires Go 1.26 or newer (see go.mod). The released binaries and
+the Docker image have no toolchain requirements.
 
 ## Features
 
@@ -30,13 +37,15 @@ features now.
 
 ## Screenshots
 
-<!-- Screenshots go here. Until real screenshots are captured, render the dashboard,
-login and monitor detail pages locally and add them as
-docs/screenshot-dashboard.png, docs/screenshot-detail.png and docs/screenshot-status.png. -->
-
 | Dashboard | Monitor detail |
 | --------- | -------------- |
-| ![dashboard](docs/screenshot-dashboard.png) | ![detail](docs/screenshot-detail.png) |
+| ![dashboard](docs/screenshots/dashboard.png) | ![monitor](docs/screenshots/monitor.png) |
+
+| Status page | Dark mode |
+| ----------- | --------- |
+| ![status](docs/screenshots/status.png) | ![dark](docs/screenshots/dark.png) |
+
+Capture guide: [docs/screenshots/README.md](docs/screenshots/README.md).
 
 ## Quick start
 
@@ -53,7 +62,7 @@ With Docker:
 
 ```sh
 docker run -d --name tickwatch -p 8080:8080 -v tickwatch-data:/data \
-  ghcr.io/tickwatch/tickwatch:latest
+  ghcr.io/chaggangamer/tickwatch:latest
 ```
 
 Or with docker compose:
