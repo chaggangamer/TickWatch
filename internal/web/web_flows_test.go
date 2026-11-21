@@ -304,7 +304,7 @@ func TestBrowserFormCreatesHTTPMonitor(t *testing.T) {
 
 	form := browserForm(csrf, map[string]string{
 		"name": "web-check",
-		"url": "https://example.com/health",
+		"url":  "https://example.com/health",
 	})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, authedRequest(session, "/monitors", form))
@@ -336,8 +336,8 @@ func TestBrowserFormCreatesTCPMonitor(t *testing.T) {
 	session, csrf := loginSession(t, h, s)
 
 	form := browserForm(csrf, map[string]string{
-		"name": "db-port",
-		"type": "tcp",
+		"name":     "db-port",
+		"type":     "tcp",
 		"tcp_host": "db.internal",
 		"tcp_port": "5432",
 	})
@@ -365,10 +365,10 @@ func TestBrowserFormCreatesHeartbeatMonitor(t *testing.T) {
 	session, csrf := loginSession(t, h, s)
 
 	form := browserForm(csrf, map[string]string{
-		"name": "nightly-job",
-		"type": "heartbeat",
+		"name":   "nightly-job",
+		"type":   "heartbeat",
 		"period": "3600",
-		"grace": "300",
+		"grace":  "300",
 	})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, authedRequest(session, "/monitors", form))
