@@ -23,7 +23,7 @@ func (d *Dispatcher) sendTelegram(ch store.Channel, msg Message) error {
 	if cfg.BotToken == "" || cfg.ChatID == "" {
 		return fmt.Errorf("telegram config requires bot_token and chat_id")
 	}
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", cfg.BotToken)
+	url := fmt.Sprintf("%s/bot%s/sendMessage", d.telegramAPI, cfg.BotToken)
 	payload := map[string]string{
 		"chat_id": cfg.ChatID,
 		"text":    msg.Title + "\n\n" + msg.Body,

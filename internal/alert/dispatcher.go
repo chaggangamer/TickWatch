@@ -34,6 +34,7 @@ type Dispatcher struct {
 	events        chan event
 	client        *http.Client
 	reminderEvery time.Duration
+	telegramAPI   string
 }
 
 func New(s store.Store, log *slog.Logger) *Dispatcher {
@@ -46,6 +47,7 @@ func New(s store.Store, log *slog.Logger) *Dispatcher {
 		events:        make(chan event, 64),
 		client:        &http.Client{Timeout: 10 * time.Second},
 		reminderEvery: 30 * time.Second,
+		telegramAPI:   "https://api.telegram.org",
 	}
 }
 
