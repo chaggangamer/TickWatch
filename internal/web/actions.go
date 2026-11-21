@@ -282,6 +282,9 @@ func (s *server) formError(w http.ResponseWriter, r *http.Request, m *store.Moni
 		fieldErrs[ve.Field] = ve.Msg
 		msg = ve.Field + " " + ve.Msg
 	}
+	if m == nil {
+		m = &store.Monitor{Interval: 60, Timeout: 10, FailureThreshold: 3, Cooldown: 300, Enabled: true}
+	}
 	data := map[string]any{
 		"Meta":        pageMeta{CSRF: sess.csrf, Title: "Add monitor"},
 		"IsEdit":      false,
@@ -290,29 +293,27 @@ func (s *server) formError(w http.ResponseWriter, r *http.Request, m *store.Moni
 		"Channels":    s.channelList(),
 		"Selected":    map[int64]bool{},
 		"HTTP":        store.HTTPConfig{Method: "GET", ExpectStatus: "200-299"},
+		"Monitor":     m,
 	}
-	if m != nil {
-		data["Monitor"] = m
-		if m.Type == store.TypeHTTP {
-			if hc, perr := store.ParseHTTPConfig(m.Config); perr == nil {
-				data["HTTP"] = hc
-				data["HeaderLines"] = headerLines(hc.Headers)
-			}
+	if m.Type == store.TypeHTTP {
+		if hc, perr := store.ParseHTTPConfig(m.Config); perr == nil {
+			data["HTTP"] = hc
+			data["HeaderLines"] = headerLines(hc.Headers)
 		}
-		if m.Type == store.TypeTCP {
-			if tc, perr := store.ParseTCPConfig(m.Config); perr == nil {
-				data["TCP"] = tc
-			}
+	}
+	if m.Type == store.TypeTCP {
+		if tc, perr := store.ParseTCPConfig(m.Config); perr == nil {
+			data["TCP"] = tc
 		}
-		if m.Type == store.TypePing {
-			if pc, perr := store.ParsePingConfig(m.Config); perr == nil {
-				data["Ping"] = pc
-			}
+	}
+	if m.Type == store.TypePing {
+		if pc, perr := store.ParsePingConfig(m.Config); perr == nil {
+			data["Ping"] = pc
 		}
-		if m.Type == store.TypeHeartbeat {
-			if hb, perr := store.ParseHeartbeatConfig(m.Config); perr == nil {
-				data["Heartbeat"] = hb
-			}
+	}
+	if m.Type == store.TypeHeartbeat {
+		if hb, perr := store.ParseHeartbeatConfig(m.Config); perr == nil {
+			data["Heartbeat"] = hb
 		}
 	}
 	s.render(w, r, 400, "monitor_form", data)

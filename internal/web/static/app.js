@@ -2,8 +2,9 @@
   "use strict";
 
   function initTypeToggle() {
-    var select = document.getElementById("type-select");
-    if (!select) select = document.getElementById("channel-type");
+    var select = document.getElementById("type-select") ||
+      document.getElementById("channel-type") ||
+      document.querySelector("select[name='type']");
     if (!select) return;
     var update = function () {
       var value = select.value;

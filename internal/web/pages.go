@@ -168,12 +168,13 @@ func (s *server) monitorForm(w http.ResponseWriter, r *http.Request) {
 	sess := sessionFrom(r.Context())
 	meta := pageMeta{CSRF: sess.csrf, Title: "Add monitor"}
 	data := map[string]any{
-		"Meta":     meta,
-		"IsEdit":   false,
-		"Monitor":  &store.Monitor{Interval: 60, Timeout: 10, FailureThreshold: 3, Cooldown: 300},
-		"HTTP":     store.HTTPConfig{Method: "GET", ExpectStatus: "200-299"},
-		"Channels": s.channelList(),
-		"Selected": map[int64]bool{},
+		"Meta":        meta,
+		"IsEdit":      false,
+		"Monitor":     &store.Monitor{Interval: 60, Timeout: 10, FailureThreshold: 3, Cooldown: 300, Enabled: true},
+		"HTTP":        store.HTTPConfig{Method: "GET", ExpectStatus: "200-299"},
+		"Channels":    s.channelList(),
+		"Selected":    map[int64]bool{},
+		"FieldErrors": map[string]string{},
 	}
 	if idStr := chi.URLParam(r, "id"); idStr != "" {
 		id, err := strconv.ParseInt(idStr, 10, 64)
@@ -244,6 +245,7 @@ func (s *server) channelsPage(w http.ResponseWriter, r *http.Request) {
 		"Meta":        pageMeta{CSRF: sess.csrf, Title: "Alert channels"},
 		"Channels":    s.channelsListForPage(),
 		"EditChannel": nil,
+		"Cfg":         map[string]any{},
 	}
 	if editID := r.URL.Query().Get("edit"); editID != "" {
 		id, err := strconv.ParseInt(editID, 10, 64)
@@ -430,10 +432,11 @@ func (s *server) passwordPage(w http.ResponseWriter, r *http.Request) {
 	user, err := s.store.UserByID(sess.userID)
 	mustChange := err == nil && user.PasswordGenerated
 	s.render(w, r, 200, "password", map[string]any{
-		"Meta":       pageMeta{CSRF: sess.csrf, Title: "Change password"},
-		"Changed":    r.URL.Query().Get("changed") == "1",
-		"MustChange": mustChange,
-		"Error":      "",
+		"Meta":        pageMeta{CSRF: sess.csrf, Title: "Change password"},
+		"Changed":     r.URL.Query().Get("changed") == "1",
+		"MustChange":  mustChange,
+		"Error":       "",
+		"FieldErrors": map[string]string{},
 	})
 }
 

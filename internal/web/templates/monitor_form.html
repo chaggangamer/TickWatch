@@ -11,8 +11,8 @@
     {{with index .FieldErrors "name"}}<div class="field-error">{{.}}</div>{{end}}
   </div>
   <div class="field-group">
-    <label for="f-type">Type</label>
-    <select id="f-type" name="type" id="type-select" {{if .IsEdit}}disabled{{end}}>
+    <label for="type-select">Type</label>
+    <select id="type-select" name="type" {{if .IsEdit}}disabled{{end}}>
       <option value="http" {{if eq .Monitor.Type "http"}}selected{{end}}>HTTP</option>
       <option value="tcp" {{if eq .Monitor.Type "tcp"}}selected{{end}}>TCP port</option>
       <option value="ping" {{if eq .Monitor.Type "ping"}}selected{{end}}>Ping</option>
