@@ -1,0 +1,9 @@
+/tickwatch
+/tickwatch.exe
+/dist/
+/data/
+/bin/
+*.db
+*.db-shm
+*.db-wal
+tickwatch.yml
