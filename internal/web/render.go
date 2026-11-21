@@ -93,7 +93,7 @@ func (s *server) parseTemplates() error {
 	return nil
 }
 
-func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name string, data any) {
+func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name string, data map[string]any) {
 	t, ok := s.tpl[name]
 	if !ok {
 		http.Error(w, "template not found", http.StatusInternalServerError)
