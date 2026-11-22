@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -370,4 +372,110 @@ func TestChannelTestResponseDoesNotLeakSecret(t *testing.T) {
 	if strings.Contains(rec.Body.String(), secret) {
 		t.Fatalf("web response leaked secret: %s", rec.Body.String())
 	}
+}
+
+func TestPauseResumeDownMonitorRecoversAndAlerts(t *testing.T) {
+	var recoveryBodies []string
+	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		recoveryBodies = append(recoveryBodies, string(body))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer hook.Close()
+
+	h, s := newWebServer(t)
+	username, password := createUser(t, s)
+	session, csrf := loginAs(t, h, s, username, password)
+	m := &store.Monitor{
+		Type: store.TypeHTTP, Name: "down-http", Config: []byte(`{"url":"https://example.com"}`),
+		Interval: 60, Timeout: 10, FailureThreshold: 1, Cooldown: 0, Enabled: true,
+		Status: store.StatusDown, CreatedAt: time.Now().Unix(), UpdatedAt: time.Now().Unix(),
+	}
+	store.Normalize(m)
+	if err := s.CreateMonitor(m); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.OpenIncident(m.ID, time.Now().Unix()-30, "refused"); err != nil {
+		t.Fatal(err)
+	}
+	ch := &store.Channel{Type: "webhook", Name: "recovery", Config: []byte(`{"url":"` + hook.URL + `"}`), CreatedAt: time.Now().Unix()}
+	if err := s.CreateChannel(ch); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetMonitorChannels(m.ID, []int64{ch.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	id := strconv.FormatInt(m.ID, 10)
+	for _, action := range []string{"pause", "resume"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, authedRequest(session, "/monitors/"+id+"/"+action, url.Values{"_csrf": {csrf}}))
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("%s status = %d", action, rec.Code)
+		}
+	}
+	loaded, _ := s.Monitor(m.ID)
+	tr := incident.New(s, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	tr.Load([]store.Monitor{*loaded}, mustOpenIncidents(s))
+	recovery := tr.Observe(loaded, true, "", time.Now().Unix())
+	if recovery == nil || recovery.Kind != incident.EventRecovered {
+		t.Fatalf("recovery = %+v", recovery)
+	}
+	alerts := alert.New(s, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	alerts.Start(context.Background())
+	alerts.NotifyRecovered(*loaded, recovery.Downtime)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(recoveryBodies) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(recoveryBodies) == 0 {
+		t.Fatal("recovery alert was not sent")
+	}
+	if open, _ := s.OpenIncidents(); len(open) != 0 {
+		t.Errorf("open incidents = %d", len(open))
+	}
+}
+
+func TestEditDownHeartbeatRecovers(t *testing.T) {
+	h, s := newWebServer(t)
+	username, password := createUser(t, s)
+	session, csrf := loginAs(t, h, s, username, password)
+	m := &store.Monitor{
+		Type: store.TypeHeartbeat, Name: "down-heartbeat", Config: []byte(`{"period":60,"grace":10}`),
+		Interval: 60, Timeout: 10, FailureThreshold: 1, Cooldown: 0, Enabled: true,
+		Status: store.StatusDown, CreatedAt: time.Now().Unix(), UpdatedAt: time.Now().Unix(),
+	}
+	store.Normalize(m)
+	if err := s.CreateMonitor(m); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.OpenIncident(m.ID, time.Now().Unix()-30, "missed heartbeat"); err != nil {
+		t.Fatal(err)
+	}
+
+	id := strconv.FormatInt(m.ID, 10)
+	form := url.Values{
+		"_csrf": {csrf}, "enabled_sent": {"1"}, "type": {"heartbeat"}, "name": {m.Name},
+		"interval": {"60"}, "timeout": {"10"}, "retries": {"0"}, "failure_threshold": {"1"},
+		"cooldown": {"0"}, "period": {"60"}, "grace": {"10"}, "enabled": {"on"},
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, authedRequest(session, "/monitors/"+id+"/update", form))
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("edit status = %d", rec.Code)
+	}
+	loaded, _ := s.Monitor(m.ID)
+	tr := incident.New(s, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	tr.Load([]store.Monitor{*loaded}, mustOpenIncidents(s))
+	if ev := tr.ForceRecover(loaded, time.Now().Unix()); ev == nil || ev.Kind != incident.EventRecovered {
+		t.Fatalf("heartbeat recovery = %+v", ev)
+	}
+}
+
+func mustOpenIncidents(s store.Store) []store.Incident {
+	items, err := s.OpenIncidents()
+	if err != nil {
+		panic(err)
+	}
+	return items
 }
