@@ -221,6 +221,13 @@ Yes. Self-hosted installs allow private addresses by default; set
 - Per-check tags and grouping
 - Maintenance windows
 
+## Known issues
+
+- Heartbeat monitors compute uptime from stored check rows, so a long
+  outage can make the percentage look lower than the real downtime.
+- Alert channels (webhook, Slack, Discord, Telegram, SMTP) are not covered
+  by the private-address block yet.
+  
 ## Comparison with Uptime Kuma
 
 Uptime Kuma is a great tool and more mature. Honest differences:
