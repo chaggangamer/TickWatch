@@ -356,3 +356,18 @@ func TestSetupConcurrentCreatesOneUser(t *testing.T) {
 		t.Errorf("successful setups = %d, want 1 (codes %v)", successes, codes)
 	}
 }
+
+func TestChannelTestResponseDoesNotLeakSecret(t *testing.T) {
+	const secret = "SECRETTOKEN123"
+	h, s := newWebServer(t)
+	createUser(t, s)
+	session, csrf := loginAs(t, h, s, "admin", "hunter2")
+	if err := s.CreateChannel(&store.Channel{Type: "webhook", Name: "ops", Config: []byte(`{"url":"http://127.0.0.1:1/` + secret + `"}`), CreatedAt: time.Now().Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, authedRequest(session, "/channels/1/test", url.Values{"_csrf": {csrf}}))
+	if strings.Contains(rec.Body.String(), secret) {
+		t.Fatalf("web response leaked secret: %s", rec.Body.String())
+	}
+}

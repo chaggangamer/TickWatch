@@ -331,3 +331,43 @@ func TestFormatDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestSecretNeverAppearsInSenderErrorOrLog(t *testing.T) {
+	const secret = "SECRETTOKEN123"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("test server does not support hijacking")
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			t.Fatal(err)
+		}
+		conn.Close()
+	}))
+	defer srv.Close()
+
+	var logs strings.Builder
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	d := New(s, logger)
+
+	ch := store.Channel{Type: "webhook", Name: "ops", Config: []byte(`{"url":"` + srv.URL + `/` + secret + `"}`)}
+	m := store.Monitor{ID: 1, Name: "web"}
+	if err := d.sendWebhook(ch, Message{Title: "test", Body: "test"}, event{monitor: m, kind: KindTest}); err == nil {
+		t.Fatal("expected webhook send error")
+	} else if strings.Contains(err.Error(), secret) {
+		t.Fatalf("sender error leaked secret: %v", err)
+	}
+
+	if err := d.send(ch, Message{Title: "test", Body: "test"}, event{monitor: m, kind: KindDown, incidentID: 1}); err == nil {
+		t.Fatal("expected dispatch send error")
+	}
+	if strings.Contains(logs.String(), secret) {
+		t.Fatalf("log leaked secret: %s", logs.String())
+	}
+}

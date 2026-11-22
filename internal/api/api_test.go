@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -441,5 +442,22 @@ func TestAPIUpdateResetsTrackerForDownMonitor(t *testing.T) {
 	}
 	if open, _ := s.OpenIncidents(); len(open) != 0 {
 		t.Errorf("incident should be closed, got %d open", len(open))
+	}
+}
+
+func TestAPITestChannelResponseDoesNotLeakSecret(t *testing.T) {
+	const secret = "SECRETTOKEN123"
+	h, s, _ := newAPI(t)
+	tok := makeToken(t, s)
+	if err := s.CreateChannel(&store.Channel{Type: "webhook", Name: "ops", Config: []byte(`{"url":"http://127.0.0.1:1/` + secret + `"}`), CreatedAt: time.Now().Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	res, body := doReq(t, h, "POST", "/api/v1/channels/1/test", tok, nil)
+	if res.StatusCode == 200 {
+		t.Fatal("expected send failure")
+	}
+	raw, _ := json.Marshal(body)
+	if strings.Contains(string(raw), secret) {
+		t.Fatalf("api response leaked secret: %s", raw)
 	}
 }

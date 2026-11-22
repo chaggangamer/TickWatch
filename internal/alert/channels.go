@@ -3,10 +3,11 @@ package alert
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"net/url"
 	"time"
 
 	"github.com/chaggangamer/tickwatch/internal/store"
@@ -28,7 +29,7 @@ func (d *Dispatcher) sendTelegram(ch store.Channel, msg Message) error {
 		"chat_id": cfg.ChatID,
 		"text":    msg.Title + "\n\n" + msg.Body,
 	}
-	return postJSON(d.client, url, payload, nil)
+	return postJSON(d.client, url, payload, nil, "send telegram")
 }
 
 func (d *Dispatcher) sendSlack(ch store.Channel, msg Message) error {
@@ -42,7 +43,7 @@ func (d *Dispatcher) sendSlack(ch store.Channel, msg Message) error {
 		return fmt.Errorf("slack config requires webhook_url")
 	}
 	payload := map[string]string{"text": msg.Title + "\n" + msg.Body}
-	return postJSON(d.client, cfg.WebhookURL, payload, nil)
+	return postJSON(d.client, cfg.WebhookURL, payload, nil, "send slack")
 }
 
 func (d *Dispatcher) sendDiscord(ch store.Channel, msg Message) error {
@@ -59,7 +60,7 @@ func (d *Dispatcher) sendDiscord(ch store.Channel, msg Message) error {
 		"content":  msg.Title + "\n" + msg.Body,
 		"username": "Tickwatch",
 	}
-	return postJSON(d.client, cfg.WebhookURL, payload, nil)
+	return postJSON(d.client, cfg.WebhookURL, payload, nil, "send discord")
 }
 
 type webhookConfig struct {
@@ -96,17 +97,30 @@ func (d *Dispatcher) sendWebhook(ch store.Channel, msg Message, ev event) error 
 	for k, v := range cfg.Headers {
 		headers[k] = v
 	}
-	return postJSON(d.client, cfg.URL, payload, headers)
+	return postJSON(d.client, cfg.URL, payload, headers, "send webhook")
 }
 
-func postJSON(client *http.Client, url string, payload any, headers map[string]string) error {
+func safeHTTPError(operation, target string, err error) error {
+	u, parseErr := url.Parse(target)
+	host := "unknown host"
+	if parseErr == nil && u.Hostname() != "" {
+		host = u.Hostname()
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return fmt.Errorf("%s: request to %s failed: %w", operation, host, urlErr.Err)
+	}
+	return fmt.Errorf("%s: request to %s failed", operation, host)
+}
+
+func postJSON(client *http.Client, target string, payload any, headers map[string]string, operation string) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("build request: %w", err)
+		return fmt.Errorf("build webhook request: invalid target")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	for k, v := range headers {
@@ -114,12 +128,12 @@ func postJSON(client *http.Client, url string, payload any, headers map[string]s
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("send failed: %w", err)
+		return safeHTTPError(operation, target, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
-		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+		io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("%s: request to target returned status %d", operation, resp.StatusCode)
 	}
 	io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 	return nil
