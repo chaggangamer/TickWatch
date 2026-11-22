@@ -58,17 +58,12 @@ go build ./cmd/tickwatch
 ./tickwatch serve
 ```
 
-With Docker:
+With Docker Compose:
 
 ```sh
-docker run -d --name tickwatch -p 8080:8080 -v tickwatch-data:/data \
-  ghcr.io/chaggangamer/tickwatch:latest
-```
-
-Or with docker compose:
-
-```sh
-docker compose up -d
+git clone https://github.com/chaggangamer/tickwatch
+cd tickwatch
+docker compose up -d --build
 ```
 
 Compose stores data in the named volume `tickwatch-data` (mounted at `/data` in the

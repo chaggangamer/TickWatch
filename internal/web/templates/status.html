@@ -12,7 +12,7 @@
   <span class="dot dot-{{.Monitor.Status}}"></span>
   <div class="status-main">
     <strong>{{.Monitor.Name}}</strong>
-    <span class="muted">{{if .Target}}{{.Target}}{{else}}heartbeat{{end}}</span>
+    <span class="cell-sub">{{.Monitor.Status}}</span>
     <svg class="uptime-bars" width="362" height="16" viewBox="0 0 362 16" role="img" aria-label="90 day uptime history">
       {{range .Days}}<rect x="{{.X}}" y="1" width="3" height="14" rx="1" class="{{.Class}}"/>{{end}}
     </svg>

@@ -212,8 +212,11 @@ func TestStatusPageShowsPublicOnly(t *testing.T) {
 		t.Fatalf("status page = %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "public-one") {
-		t.Error("public monitor missing from status page")
+	if !strings.Contains(body, "public-one") || !strings.Contains(body, "up") {
+		t.Error("public monitor name or status missing from status page")
+	}
+	if strings.Contains(body, "https://example.com") {
+		t.Error("monitor target leaked to status page")
 	}
 	if strings.Contains(body, "private-one") {
 		t.Error("private monitor leaked to status page")
