@@ -172,3 +172,48 @@ func TestUnknownMonitorFirstSeen(t *testing.T) {
 		t.Fatalf("unknown monitor with threshold 1 should trigger: %+v", ev)
 	}
 }
+
+func TestResetKeepsDownStateFromStore(t *testing.T) {
+	tr, s, m := testTracker(t)
+	m.FailureThreshold = 1
+	now := time.Now().Unix()
+
+	if ev := tr.Observe(&m, false, "refused", now); ev == nil {
+		t.Fatal("expected down event")
+	}
+	if err := s.SaveRuntime(&m); err != nil {
+		t.Fatal(err)
+	}
+	if !tr.IsDown(m.ID) {
+		t.Fatal("monitor should be down")
+	}
+
+	tr.Reset(m.ID)
+
+	if !tr.IsDown(m.ID) {
+		t.Error("after reset the monitor is still down in the store, tracker should know")
+	}
+	ev := tr.Observe(&m, true, "", now+30)
+	if ev == nil || ev.Kind != EventRecovered {
+		t.Fatalf("success after reset should recover, got %+v", ev)
+	}
+	if m.Status != store.StatusUp {
+		t.Errorf("status = %s, want up", m.Status)
+	}
+	if open, _ := s.OpenIncidents(); len(open) != 0 {
+		t.Errorf("incident should be closed, got %d open", len(open))
+	}
+}
+
+func TestResetUpMonitorStaysUp(t *testing.T) {
+	tr, _, m := testTracker(t)
+	m.FailureThreshold = 3
+	tr.Observe(&m, false, "refused", time.Now().Unix())
+	tr.Reset(m.ID)
+	if tr.IsDown(m.ID) {
+		t.Error("monitor was never down, reset should keep it up")
+	}
+	if ev := tr.Observe(&m, false, "refused", time.Now().Unix()+10); ev != nil {
+		t.Errorf("one failure under threshold 3 should not trip: %+v", ev)
+	}
+}

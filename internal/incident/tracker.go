@@ -96,7 +96,27 @@ func (t *Tracker) ForceRecover(m *store.Monitor, now int64) *Event {
 func (t *Tracker) Reset(monitorID int64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	delete(t.st, monitorID)
+
+	m, err := t.store.Monitor(monitorID)
+	if err != nil {
+		delete(t.st, monitorID)
+		return
+	}
+	if m.Status != store.StatusDown {
+		t.st[monitorID] = &state{}
+		return
+	}
+	downSince := int64(0)
+	open, err := t.store.OpenIncidents()
+	if err == nil {
+		for _, inc := range open {
+			if inc.MonitorID == monitorID {
+				downSince = inc.StartedAt
+				break
+			}
+		}
+	}
+	t.st[monitorID] = &state{down: true, downSince: downSince}
 }
 
 func (t *Tracker) IsDown(monitorID int64) bool {

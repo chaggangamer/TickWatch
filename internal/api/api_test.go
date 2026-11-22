@@ -17,7 +17,7 @@ import (
 	"github.com/chaggangamer/tickwatch/internal/store"
 )
 
-func newAPI(t *testing.T) (http.Handler, *store.DB) {
+func newAPI(t *testing.T) (http.Handler, *store.DB, *incident.Tracker) {
 	t.Helper()
 	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
@@ -30,8 +30,8 @@ func newAPI(t *testing.T) (http.Handler, *store.DB) {
 	sched := scheduler.New(scheduler.Deps{
 		Store: s, Tracker: tr, Alerts: al, Workers: 2, Log: log,
 	})
-	d := Deps{Store: s, Alerts: al, Sched: sched, BaseURL: "http://localhost:8080", Version: "test", Log: log}
-	return New(d), s.(*store.DB)
+	d := Deps{Store: s, Alerts: al, Sched: sched, Tracker: tr, BaseURL: "http://localhost:8080", Version: "test", Log: log}
+	return New(d), s.(*store.DB), tr
 }
 
 func doReq(t *testing.T, h http.Handler, method, path, token string, body any) (*http.Response, map[string]any) {
@@ -77,7 +77,7 @@ func validMonitorBody() map[string]any {
 }
 
 func TestAuthRequired(t *testing.T) {
-	h, _ := newAPI(t)
+	h, _, _ := newAPI(t)
 
 	res, body := doReq(t, h, "GET", "/api/v1/monitors", "", nil)
 	if res.StatusCode != 401 {
@@ -95,7 +95,7 @@ func TestAuthRequired(t *testing.T) {
 }
 
 func TestMonitorCRUD(t *testing.T) {
-	h, s := newAPI(t)
+	h, s, _ := newAPI(t)
 	tok := makeToken(t, s)
 
 	res, body := doReq(t, h, "POST", "/api/v1/monitors", tok, validMonitorBody())
@@ -146,7 +146,7 @@ func TestMonitorCRUD(t *testing.T) {
 }
 
 func TestMonitorValidationErrors(t *testing.T) {
-	h, s := newAPI(t)
+	h, s, _ := newAPI(t)
 	tok := makeToken(t, s)
 
 	cases := []struct {
@@ -173,7 +173,7 @@ func TestMonitorValidationErrors(t *testing.T) {
 }
 
 func TestResultsPagination(t *testing.T) {
-	h, s := newAPI(t)
+	h, s, _ := newAPI(t)
 	tok := makeToken(t, s)
 
 	m := &store.Monitor{
@@ -214,7 +214,7 @@ func TestResultsPagination(t *testing.T) {
 }
 
 func TestResultsNotFoundMonitor(t *testing.T) {
-	h, s := newAPI(t)
+	h, s, _ := newAPI(t)
 	tok := makeToken(t, s)
 	res, _ := doReq(t, h, "GET", "/api/v1/monitors/42/results", tok, nil)
 	if res.StatusCode != 404 {
@@ -223,7 +223,7 @@ func TestResultsNotFoundMonitor(t *testing.T) {
 }
 
 func TestChannelEndpoints(t *testing.T) {
-	h, s := newAPI(t)
+	h, s, _ := newAPI(t)
 	tok := makeToken(t, s)
 
 	body := map[string]any{
@@ -278,7 +278,7 @@ func TestChannelEndpoints(t *testing.T) {
 }
 
 func TestTestChannelSend(t *testing.T) {
-	h, s := newAPI(t)
+	h, s, _ := newAPI(t)
 	tok := makeToken(t, s)
 
 	var hits int
@@ -307,7 +307,7 @@ func TestTestChannelSend(t *testing.T) {
 }
 
 func TestHeartbeatPingAndPingURL(t *testing.T) {
-	h, s := newAPI(t)
+	h, s, _ := newAPI(t)
 	tok := makeToken(t, s)
 
 	body := map[string]any{
@@ -343,7 +343,7 @@ func TestHeartbeatPingAndPingURL(t *testing.T) {
 }
 
 func TestIncidentsEndpoint(t *testing.T) {
-	h, s := newAPI(t)
+	h, s, _ := newAPI(t)
 	tok := makeToken(t, s)
 
 	m := &store.Monitor{
@@ -381,7 +381,7 @@ func TestIncidentsEndpoint(t *testing.T) {
 }
 
 func TestHealthz(t *testing.T) {
-	h, _ := newAPI(t)
+	h, _, _ := newAPI(t)
 	res, body := doReq(t, h, "GET", "/healthz", "", nil)
 	if res.StatusCode != 200 {
 		t.Errorf("status = %d", res.StatusCode)
@@ -392,7 +392,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestInvalidID(t *testing.T) {
-	h, s := newAPI(t)
+	h, s, _ := newAPI(t)
 	tok := makeToken(t, s)
 	res, _ := doReq(t, h, "GET", "/api/v1/monitors/abc", tok, nil)
 	if res.StatusCode != 400 {
@@ -401,5 +401,45 @@ func TestInvalidID(t *testing.T) {
 	res, _ = doReq(t, h, "GET", "/api/v1/monitors/0", tok, nil)
 	if res.StatusCode != 400 {
 		t.Errorf("status = %d, want 400", res.StatusCode)
+	}
+}
+
+func TestAPIUpdateResetsTrackerForDownMonitor(t *testing.T) {
+	h, s, tr := newAPI(t)
+	tok := makeToken(t, s)
+
+	m := &store.Monitor{
+		Type: store.TypeHTTP, Name: "down-one",
+		Config:   []byte(`{"url":"https://example.com"}`),
+		Interval: 60, Timeout: 10, FailureThreshold: 1, Cooldown: 300,
+		Enabled: true, Status: store.StatusDown,
+		CreatedAt: time.Now().Unix(), UpdatedAt: time.Now().Unix(), NextRunAt: time.Now().Unix(),
+	}
+	store.Normalize(m)
+	if err := s.CreateMonitor(m); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.OpenIncident(m.ID, time.Now().Unix()-60, "refused"); err != nil {
+		t.Fatal(err)
+	}
+
+	upd := validMonitorBody()
+	upd["name"] = "down-one-renamed"
+	res, _ := doReq(t, h, "PUT", "/api/v1/monitors/1", tok, upd)
+	if res.StatusCode != 200 {
+		t.Fatalf("update status = %d", res.StatusCode)
+	}
+	if !tr.IsDown(m.ID) {
+		t.Fatal("after api update on a DOWN monitor the tracker should be down again")
+	}
+	ev := tr.Observe(m, true, "", time.Now().Unix()+30)
+	if ev == nil || ev.Kind != incident.EventRecovered {
+		t.Fatalf("success after api update should recover, got %+v", ev)
+	}
+	if m.Status != store.StatusUp {
+		t.Errorf("status = %s, want up", m.Status)
+	}
+	if open, _ := s.OpenIncidents(); len(open) != 0 {
+		t.Errorf("incident should be closed, got %d open", len(open))
 	}
 }

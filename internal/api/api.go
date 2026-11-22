@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/chaggangamer/tickwatch/internal/alert"
+	"github.com/chaggangamer/tickwatch/internal/incident"
 	"github.com/chaggangamer/tickwatch/internal/scheduler"
 	"github.com/chaggangamer/tickwatch/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -18,6 +19,7 @@ type Deps struct {
 	Store   store.Store
 	Alerts  *alert.Dispatcher
 	Sched   *scheduler.Scheduler
+	Tracker *incident.Tracker
 	BaseURL string
 	Version string
 	Log     *slog.Logger

@@ -230,6 +230,9 @@ func updateMonitor(d Deps) http.HandlerFunc {
 			writeErr(w, 500, "internal", "update monitor failed")
 			return
 		}
+		if d.Tracker != nil {
+			d.Tracker.Reset(m.ID)
+		}
 		if req.ChannelIDs != nil {
 			if err := d.Store.SetMonitorChannels(m.ID, req.ChannelIDs); err != nil {
 				writeErr(w, 400, "invalid_channels", "one or more channel ids do not exist")
@@ -259,6 +262,9 @@ func deleteMonitor(d Deps) http.HandlerFunc {
 		if err != nil {
 			writeErr(w, 500, "internal", "delete monitor failed")
 			return
+		}
+		if d.Tracker != nil {
+			d.Tracker.Reset(id)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
