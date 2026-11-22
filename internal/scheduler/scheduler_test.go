@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -129,6 +130,24 @@ func newHTTPMonitor(t *testing.T, s *store.DB, threshold int) *store.Monitor {
 	return m
 }
 
+func newHeartbeatMonitor(t *testing.T, s *store.DB, period, grace int) *store.Monitor {
+	t.Helper()
+	m := &store.Monitor{
+		Type: store.TypeHeartbeat, Name: "nightly",
+		Config:   []byte(fmt.Sprintf(`{"period":%d,"grace":%d}`, period, grace)),
+		Interval: 60, Timeout: 5, FailureThreshold: 3, Cooldown: 60,
+		Enabled: true, Status: store.StatusUp,
+		CreatedAt: time.Now().Unix(), UpdatedAt: time.Now().Unix(),
+		NextRunAt: time.Now().Unix(),
+	}
+	store.Normalize(m)
+	m.HeartbeatToken = store.NewToken(16)
+	if err := s.CreateMonitor(m); err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
 func TestRunsDueChecks(t *testing.T) {
 	env := newTestEnv(t, 2)
 	m := newHTTPMonitor(t, env.store, 3)
@@ -202,27 +221,25 @@ func TestGoesDownAfterThreshold(t *testing.T) {
 
 func TestHeartbeatMissedPing(t *testing.T) {
 	env := newTestEnv(t, 1)
-	m := &store.Monitor{
-		Type: store.TypeHeartbeat, Name: "nightly",
-		Config:   []byte(`{"period":60,"grace":0}`),
-		Interval: 60, Timeout: 5, FailureThreshold: 3, Cooldown: 60,
-		Enabled: true, Status: store.StatusUp,
-		CreatedAt: time.Now().Unix(), UpdatedAt: time.Now().Unix(),
-		NextRunAt: time.Now().Unix(),
-	}
-	store.Normalize(m)
-	m.NextDeadlineAt = time.Now().Unix() - 1
-	m.HeartbeatToken = store.NewToken(16)
-	if err := env.store.CreateMonitor(m); err != nil {
-		t.Fatal(err)
-	}
+	m := newHeartbeatMonitor(t, env.store, 60, 0)
 	env.start()
 	defer env.stop()
+
+	// Startup moves overdue deadlines forward, so make this one overdue only
+	// after the scheduler has started.
+	time.Sleep(300 * time.Millisecond)
+	m.NextDeadlineAt = time.Now().Unix() - 1
+	if err := env.store.SaveRuntime(m); err != nil {
+		t.Fatal(err)
+	}
 
 	waitFor(t, 8*time.Second, func() bool {
 		got, err := env.store.Monitor(m.ID)
 		return err == nil && got.Status == store.StatusDown
 	})
+	if results, _ := env.store.RecentResults(m.ID, 10); len(results) != 1 {
+		t.Errorf("results at the moment of going down = %d, want 1: one missed deadline is one failure", len(results))
+	}
 
 	if err := env.sched.HandlePing(m.HeartbeatToken); err != nil {
 		t.Fatalf("handle ping: %v", err)
@@ -240,6 +257,30 @@ func TestHeartbeatMissedPing(t *testing.T) {
 
 	if err := env.sched.HandlePing("unknown-token"); err != store.ErrNotFound {
 		t.Errorf("unknown token err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestStartupPushesOverdueHeartbeatDeadlines(t *testing.T) {
+	env := newTestEnv(t, 1)
+	m := newHeartbeatMonitor(t, env.store, 60, 30)
+	m.NextDeadlineAt = time.Now().Unix() - 500
+	if err := env.store.SaveRuntime(m); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := env.sched.staggerOverdue(); err != nil {
+		t.Fatalf("stagger: %v", err)
+	}
+
+	got, _ := env.store.Monitor(m.ID)
+	if want := time.Now().Unix() + 60 + 30 - 2; got.NextDeadlineAt < want {
+		t.Errorf("deadline = %d, want at least %d (a fresh period plus grace)", got.NextDeadlineAt, want)
+	}
+	if got.Status != store.StatusUp {
+		t.Errorf("status = %s, want up", got.Status)
+	}
+	if results, _ := env.store.RecentResults(m.ID, 5); len(results) != 0 {
+		t.Errorf("results recorded at startup = %d, want 0", len(results))
 	}
 }
 

@@ -88,6 +88,10 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	}
 }
 
+// staggerOverdue runs once at startup. Checks that came due while the process
+// was stopped are spread over the next 30 seconds, and heartbeat deadlines that
+// passed during the downtime get a fresh window, since jobs could not reach
+// Tickwatch while it was off.
 func (s *Scheduler) staggerOverdue() error {
 	monitors, err := s.store.Monitors()
 	if err != nil {
@@ -95,11 +99,24 @@ func (s *Scheduler) staggerOverdue() error {
 	}
 	now := time.Now().Unix()
 	for _, m := range monitors {
-		if m.Enabled && m.NextRunAt < now {
+		if !m.Enabled {
+			continue
+		}
+		changed := false
+		if m.NextRunAt < now {
 			m.NextRunAt = now + int64(rand.IntN(30))
-			if err := s.store.SaveRuntime(&m); err != nil {
-				return fmt.Errorf("stagger monitor %d: %w", m.ID, err)
-			}
+			changed = true
+		}
+		if m.Type == store.TypeHeartbeat && m.Status == store.StatusUp &&
+			m.NextDeadlineAt > 0 && m.NextDeadlineAt <= now {
+			m.NextDeadlineAt = now + int64(m.HeartbeatPeriod()+m.HeartbeatGrace())
+			changed = true
+		}
+		if !changed {
+			continue
+		}
+		if err := s.store.SaveRuntime(&m); err != nil {
+			return fmt.Errorf("stagger monitor %d: %w", m.ID, err)
 		}
 	}
 	return nil
@@ -255,6 +272,10 @@ func (s *Scheduler) sweepHeartbeats() {
 		if err := s.store.RecordResult(&res); err != nil {
 			s.log.Error("record heartbeat result failed", "monitor_id", m.ID, "err", err)
 		}
+		// One missed deadline already means a full period plus grace passed
+		// without a ping. The sweep runs every few seconds, so counting each
+		// sweep against the failure threshold would not measure missed pings.
+		m.FailureThreshold = 1
 		ev := s.tracker.Observe(&m, false, reason, now)
 		s.notifyEvent(ev)
 		m.LastCheckAt = now
