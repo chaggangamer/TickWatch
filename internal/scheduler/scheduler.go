@@ -36,6 +36,9 @@ type Scheduler struct {
 	wg         sync.WaitGroup
 	sweepEvery time.Duration
 	sslEvery   time.Duration
+
+	mu       sync.Mutex
+	inflight map[int64]struct{}
 }
 
 func New(d Deps) *Scheduler {
@@ -55,6 +58,7 @@ func New(d Deps) *Scheduler {
 		jobs:       make(chan store.Monitor, 1024),
 		sweepEvery: 5 * time.Second,
 		sslEvery:   6 * time.Hour,
+		inflight:   make(map[int64]struct{}),
 	}
 }
 
@@ -101,6 +105,22 @@ func (s *Scheduler) staggerOverdue() error {
 	return nil
 }
 
+func (s *Scheduler) claim(id int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, busy := s.inflight[id]; busy {
+		return false
+	}
+	s.inflight[id] = struct{}{}
+	return true
+}
+
+func (s *Scheduler) release(id int64) {
+	s.mu.Lock()
+	delete(s.inflight, id)
+	s.mu.Unlock()
+}
+
 func (s *Scheduler) dispatchDue(ctx context.Context) {
 	now := time.Now().Unix()
 	due, err := s.store.DueMonitors(now, dueLimit)
@@ -109,9 +129,13 @@ func (s *Scheduler) dispatchDue(ctx context.Context) {
 		return
 	}
 	for _, m := range due {
+		if !s.claim(m.ID) {
+			continue
+		}
 		select {
 		case s.jobs <- m:
 		default:
+			s.release(m.ID)
 			s.log.Warn("worker queue full, skipping check", "monitor_id", m.ID)
 		}
 	}
@@ -130,6 +154,7 @@ func (s *Scheduler) worker(ctx context.Context) {
 }
 
 func (s *Scheduler) runCheck(m store.Monitor) {
+	defer s.release(m.ID)
 	checkCtx, cancel := context.WithTimeout(context.Background(), s.checkBudget(m))
 	defer cancel()
 	now := time.Now().Unix()

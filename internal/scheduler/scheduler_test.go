@@ -38,6 +38,29 @@ func (f *fakeRunner) callCount() int {
 	return f.calls
 }
 
+type slowRunner struct {
+	mu    sync.Mutex
+	delay time.Duration
+	calls int
+}
+
+func (r *slowRunner) Run(ctx context.Context, m store.Monitor) checker.Result {
+	r.mu.Lock()
+	r.calls++
+	r.mu.Unlock()
+	select {
+	case <-time.After(r.delay):
+	case <-ctx.Done():
+	}
+	return checker.Result{OK: false, Error: "slow failure"}
+}
+
+func (r *slowRunner) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.calls
+}
+
 type testEnv struct {
 	store   *store.DB
 	tracker *incident.Tracker
@@ -122,6 +145,29 @@ func TestRunsDueChecks(t *testing.T) {
 	}
 	if got.NextRunAt <= time.Now().Unix()-10 {
 		t.Errorf("next run not rescheduled: %d", got.NextRunAt)
+	}
+}
+
+func TestSlowCheckIsNotRedispatched(t *testing.T) {
+	env := newTestEnv(t, 4)
+	runner := &slowRunner{delay: 3 * time.Second}
+	env.sched.runner = runner
+	m := newHTTPMonitor(t, env.store, 3)
+	env.start()
+	defer env.stop()
+
+	time.Sleep(3500 * time.Millisecond)
+
+	if got := runner.callCount(); got != 1 {
+		t.Fatalf("slow check started %d times while the first run was still in progress, want 1", got)
+	}
+	waitFor(t, 8*time.Second, func() bool {
+		results, _ := env.store.RecentResults(m.ID, 10)
+		return len(results) >= 1
+	})
+	results, _ := env.store.RecentResults(m.ID, 10)
+	if len(results) != 1 {
+		t.Errorf("results recorded = %d, want 1 for the first run", len(results))
 	}
 }
 
