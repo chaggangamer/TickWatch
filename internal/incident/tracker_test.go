@@ -75,6 +75,9 @@ func TestRecovery(t *testing.T) {
 	if ev := tr.Observe(&m, false, "refused", now); ev == nil {
 		t.Fatal("threshold 1 should trigger immediately")
 	}
+	if err := s.SaveRuntime(&m); err != nil {
+		t.Fatal(err)
+	}
 	tr.Observe(&m, false, "refused", now+10)
 
 	ev := tr.Observe(&m, true, "", now+40)
@@ -97,7 +100,7 @@ func TestRecovery(t *testing.T) {
 }
 
 func TestForceRecover(t *testing.T) {
-	tr, _, _ := testTracker(t)
+	tr, s, _ := testTracker(t)
 	m := monitor("hb", 1)
 	now := time.Now().Unix()
 
@@ -105,6 +108,9 @@ func TestForceRecover(t *testing.T) {
 		t.Errorf("force recover on up monitor should return nil, got %+v", ev)
 	}
 	tr.Observe(&m, false, "missed", now)
+	if err := s.SaveRuntime(&m); err != nil {
+		t.Fatal(err)
+	}
 	ev := tr.ForceRecover(&m, now+30)
 	if ev == nil || ev.Kind != EventRecovered {
 		t.Fatalf("force recover should recover, got %+v", ev)
@@ -124,6 +130,9 @@ func TestLoad(t *testing.T) {
 	}
 	down := m
 	down.Status = store.StatusDown
+	if err := s.SaveRuntime(&down); err != nil {
+		t.Fatal(err)
+	}
 
 	tr.Load([]store.Monitor{down}, mustOpen(s))
 

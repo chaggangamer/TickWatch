@@ -60,6 +60,7 @@ func (t *Tracker) Observe(m *store.Monitor, ok bool, reason string, now int64) *
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	s := t.state(m.ID)
+	t.refreshFromStore(m, s)
 	if ok {
 		s.fails = 0
 		if s.down {
@@ -86,6 +87,7 @@ func (t *Tracker) ForceRecover(m *store.Monitor, now int64) *Event {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	s := t.state(m.ID)
+	t.refreshFromStore(m, s)
 	s.fails = 0
 	if s.down {
 		return t.recover(m, s, now)
@@ -122,8 +124,9 @@ func (t *Tracker) Reset(monitorID int64) {
 func (t *Tracker) IsDown(monitorID int64) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	s := t.st[monitorID]
-	return s != nil && s.down
+	s := t.state(monitorID)
+	t.refreshFromStore(&store.Monitor{ID: monitorID}, s)
+	return s.down
 }
 
 func (t *Tracker) state(id int64) *state {
@@ -133,6 +136,32 @@ func (t *Tracker) state(id int64) *state {
 		t.st[id] = s
 	}
 	return s
+}
+
+func (t *Tracker) refreshFromStore(m *store.Monitor, s *state) {
+	stored, err := t.store.Monitor(m.ID)
+	if err != nil {
+		stored = m
+	}
+	if stored.Status != store.StatusDown {
+		s.down = false
+		s.downSince = 0
+		return
+	}
+	if s.down {
+		return
+	}
+	open, err := t.store.OpenIncidents()
+	if err != nil {
+		return
+	}
+	for _, inc := range open {
+		if inc.MonitorID == m.ID {
+			s.down = true
+			s.downSince = inc.StartedAt
+			return
+		}
+	}
 }
 
 func (t *Tracker) recover(m *store.Monitor, s *state, now int64) *Event {
