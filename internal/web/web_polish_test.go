@@ -375,10 +375,13 @@ func TestChannelTestResponseDoesNotLeakSecret(t *testing.T) {
 }
 
 func TestPauseResumeDownMonitorRecoversAndAlerts(t *testing.T) {
+	var mu sync.Mutex
 	var recoveryBodies []string
 	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
 		recoveryBodies = append(recoveryBodies, string(body))
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer hook.Close()
@@ -425,10 +428,19 @@ func TestPauseResumeDownMonitorRecoversAndAlerts(t *testing.T) {
 	alerts.Start(context.Background())
 	alerts.NotifyRecovered(*loaded, recovery.Downtime)
 	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && len(recoveryBodies) == 0 {
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		sent := len(recoveryBodies) > 0
+		mu.Unlock()
+		if sent {
+			break
+		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if len(recoveryBodies) == 0 {
+	mu.Lock()
+	sent := len(recoveryBodies) > 0
+	mu.Unlock()
+	if !sent {
 		t.Fatal("recovery alert was not sent")
 	}
 	if open, _ := s.OpenIncidents(); len(open) != 0 {
