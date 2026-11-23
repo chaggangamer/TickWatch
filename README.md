@@ -71,6 +71,23 @@ docker compose up -d --build
 Compose stores data in the named volume `tickwatch-data` (mounted at `/data` in the
 container). Inspect it with `docker volume inspect tickwatch-data`.
 
+With a release binary: download the archive for your platform from the Releases page,
+extract it, open a terminal in that folder and run `tickwatch serve`. On Windows that
+is `tickwatch.exe serve`. It is a command-line program, so double-clicking it does
+nothing useful. The database file is created in the current folder; set
+`TICKWATCH_DB_PATH` to change it. The server listens on port 8080 by default; set
+`TICKWATCH_LISTEN` (for example `:8081`) to change it.
+
+The Windows binaries are not code-signed, so SmartScreen may show a warning the first
+time ("More info", then "Run anyway"). To check that a download is intact, compare its
+SHA-256 with `checksums.txt` from the release page:
+
+```powershell
+Get-FileHash .\tickwatch_0.1.0_windows_amd64.zip -Algorithm SHA256
+```
+
+If you would rather not bypass the warning, use the Docker install instead.
+
 Open http://localhost:8080 and complete the setup page to create the admin account.
 Until the first admin exists, every dashboard request is redirected to the setup page
 and it disappears as soon as one is created. For automated deployments, set
@@ -229,6 +246,7 @@ Yes. Self-hosted installs allow private addresses by default; set
   outage can make the percentage look lower than the real downtime.
 - Alert channels (webhook, Slack, Discord, Telegram, SMTP) are not covered
   by the private-address block yet.
+- Windows binaries are unsigned, so SmartScreen shows a warning on first run.
   
 ## Comparison with Uptime Kuma
 
