@@ -29,7 +29,8 @@ the Docker image have no toolchain requirements.
 - A monitor goes DOWN after N consecutive failures and UP after one success
 - Incidents with start, end, duration and reason
 - Uptime percentages for 24h, 7d, 30d and 90d
-- Raw results kept  configurable days (default 30), then aggregated into hourly summaries
+- Raw results kept for a configurable number of days (default 30), then aggregated into
+  hourly summaries
 - Alerts with per-monitor cooldown so one outage does not spam the channel
 - Dashboard with live status, response time sparklines and an SVG response time chart
 - Public status page at /status for monitors you mark as public
@@ -116,7 +117,7 @@ tickwatch serve --config /etc/tickwatch/tickwatch.yml
 | `retention.summary_days` | `TICKWATCH_SUMMARY_DAYS` | `365` | Days to keep hourly summaries |
 | `ssrf.block_private` | `TICKWATCH_SSRF_BLOCK_PRIVATE` | `false` | Forbid checks against private and loopback addresses |
 | `admin.username` | `TICKWATCH_ADMIN_USERNAME` | `admin` | Initial dashboard user |
-| `admin.password` | `TICKWATCH_ADMIN_PASSWORD` | generated | Initial dashboard password |
+| `admin.password` | `TICKWATCH_ADMIN_PASSWORD` | none | Optional: create the admin at boot instead of using the setup page (minimum 8 characters) |
 
 See [tickwatch.example.yml](tickwatch.example.yml) for a commented file.
 
@@ -205,7 +206,8 @@ Not yet. Version 1 has a single dashboard user. The user model sits behind the
 `store.Store` interface so a hosted edition can extend it.
 
 **How is this different from a hosted service?**
-Nothing leaves your machine. Checks run locally, data stays in your SQLite file.
+Checks run from your own server and all data stays in your SQLite file. The only
+traffic that leaves is the checks themselves and the alerts you configure.
 
 **Why does my monitor show up while the site is broken for me?**
 Checks run from wherever Tickwatch runs. Network path differences matter; run
@@ -250,14 +252,13 @@ Yes. Self-hosted installs allow private addresses by default; set
   
 ## Comparison with Uptime Kuma
 
-Uptime Kuma is a great tool and more mature. Honest differences:
+Uptime Kuma is the more mature project. The differences:
 
 - Uptime Kuma runs on Node.js with a large UI surface and many integrations; Tickwatch
   is one static Go binary with SQLite, no JavaScript build step and a smaller scope.
 - Uptime Kuma has more notification providers, proxies, DNS monitors and push options.
-  Tickwatch covers the common five channels and focuses on doing them well.
-- Tickwatch ships a token-authenticated JSON API designed for automation and a CLI
-  for headless setup; Uptime Kuma's API surface is less formal.
+  Tickwatch covers five channels: Telegram, Slack, Discord, email and webhook.
+- Tickwatch ships a token-authenticated JSON API and a CLI for headless setup.
 - Tickwatch aggregates raw results into hourly summaries with a fixed retention
   policy out of the box; useful for long-running self-hosted instances.
 - If you want the widest integration set and a plugin-style ecosystem, use Uptime
