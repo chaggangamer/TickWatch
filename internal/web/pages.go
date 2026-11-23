@@ -476,15 +476,8 @@ func (s *server) passwordSubmit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) setupPage(w http.ResponseWriter, r *http.Request) {
-	token := store.NewToken(16)
-	http.SetCookie(w, &http.Cookie{
-		Name:     setupCookie,
-		Value:    token,
-		Path:     "/setup",
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-		MaxAge:   600,
-	})
+	token := setupTokenFor(r)
+	setSetupCookie(w, token)
 	s.render(w, r, 200, "setup", map[string]any{
 		"Meta":       pageMeta{Title: "Set up Tickwatch"},
 		"SetupToken": token,
@@ -499,19 +492,20 @@ func (s *server) setupSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fail := func(msg string) {
-		token := store.NewToken(16)
-		http.SetCookie(w, &http.Cookie{
-			Name: setupCookie, Value: token, Path: "/setup", HttpOnly: true,
-			SameSite: http.SameSiteStrictMode, MaxAge: 600,
-		})
+		token := setupTokenFor(r)
+		setSetupCookie(w, token)
 		s.render(w, r, 400, "setup", map[string]any{
 			"Meta": pageMeta{Title: "Set up Tickwatch"}, "SetupToken": token,
 			"Error": msg, "Username": r.FormValue("username"),
 		})
 	}
 	cookie, err := r.Cookie(setupCookie)
+	if err != nil || cookie.Value == "" {
+		fail("Your browser did not send the setup cookie. Allow cookies for this site, then reload the page and try again.")
+		return
+	}
 	provided := r.FormValue("setup_token")
-	if err != nil || cookie.Value == "" || !constantTimeEqual(provided, cookie.Value) {
+	if !constantTimeEqual(provided, cookie.Value) {
 		fail("Invalid or expired form token, please try again.")
 		return
 	}
