@@ -74,6 +74,7 @@ func New(d Deps) (http.Handler, error) {
 	mux.Use(s.setupGuard)
 	mux.NotFound(s.notFound)
 	mux.Handle("/static/*", staticHandler())
+	mux.Get("/favicon.ico", faviconHandler())
 	mux.Get("/setup", s.setupPage)
 	mux.Post("/setup", s.setupSubmit)
 	mux.Get("/login", s.loginPage)
@@ -122,7 +123,7 @@ func (s *server) setupGuard(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if strings.HasPrefix(p, "/static/") || p == "/healthz" ||
+		if strings.HasPrefix(p, "/static/") || p == "/favicon.ico" || p == "/healthz" ||
 			p == "/ping" || strings.HasPrefix(p, "/ping/") ||
 			strings.HasPrefix(p, "/api/") {
 			next.ServeHTTP(w, r)
@@ -163,6 +164,18 @@ func staticHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		fileServer.ServeHTTP(w, r)
+	}
+}
+
+func faviconHandler() http.HandlerFunc {
+	data, err := staticFS.ReadFile("static/favicon.svg")
+	if err != nil {
+		panic("favicon embed missing: " + err.Error())
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = w.Write(data)
 	}
 }
 

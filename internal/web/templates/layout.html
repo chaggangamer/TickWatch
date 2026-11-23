@@ -5,11 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {{if .Meta.Title}}<title>{{.Meta.Title}} - Tickwatch</title>{{else}}<title>Tickwatch</title>{{end}}
 <link rel="stylesheet" href="/static/style.css">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 </head>
 <body>
 <nav class="nav">
   <div class="container nav-inner">
-    <a class="brand" href="/">tickwatch</a>
+    <a class="brand" href="/">
+      <svg class="brand-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="22" height="22" aria-hidden="true">
+        <rect width="64" height="64" rx="15" fill="#2563eb"/>
+        <polyline points="8,35 17,35 21,25 26,41 31,46 56,18" fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      tickwatch
+    </a>
     <div class="nav-links">
       {{if .Meta.CSRF}}
       <a href="/" {{if eq .Meta.Path "/"}}class="active"{{end}}>Monitors</a>

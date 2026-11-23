@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.svg" width="72" alt="Tickwatch logo"></p>
+
 # Tickwatch
 
 [![CI](https://github.com/chaggangamer/tickwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/chaggangamer/tickwatch/actions/workflows/ci.yml)
